@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tri LTB 1v1 Reflex Duel Clash</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+  <!-- Container (9:16 Aspect Ratio Enforced via max-w-md and h-full) -->
+  <div id="game-container" class="mx-auto w-full h-full max-w-md flex flex-col justify-between">
+    <div class="overlay-dark"></div>
+    
+    <!-- State 1: Card Select / Entry -->
+    <div id="screen-setup" class="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50 p-6 transition-opacity duration-300">
+      <img src="/assets/tri-logo.png" alt="Tri Logo" class="w-24 mb-6" onerror="this.style.display='none'">
+      <h1 class="font-display text-4xl mb-2 text-center text-white glow-cyan italic">REFLEX DUEL</h1>
+      <p class="text-sm text-gray-300 mb-8 text-center">Enter your Tri number to join the clash!</p>
+      
+      <input type="tel" id="input-phone" placeholder="0896..." class="w-full max-w-xs px-4 py-4 bg-transparent border-b-2 border-[#00E5FF] text-white text-center focus:outline-none focus:border-[#FF0066] mb-8 transition-colors">
+      
+      <div id="school-selection" class="w-full max-w-xs flex justify-between gap-4 hidden">
+        <button id="btn-school-a" class="flex-1 battle-card card-kicker p-4 cursor-pointer hover:bg-white/5 transition-all">
+          <span class="text-gray-400 text-xs mb-2">TEAM A</span>
+          <span class="font-bold text-lg text-center text-magenta glow-magenta">KICKER</span>
+        </button>
+        <button id="btn-school-b" class="flex-1 battle-card card-goalie p-4 cursor-pointer hover:bg-white/5 transition-all">
+          <span class="text-gray-400 text-xs mb-2">TEAM B</span>
+          <span class="font-bold text-lg text-center text-cyan glow-cyan">GOALIE</span>
+        </button>
+      </div>
+      
+      <div id="waiting-msg" class="mt-8 font-bold text-[#FF0066] animate-pulse hidden">WAITING FOR HOST...</div>
+    </div>
+
+    <!-- State 2: Charging (3s) -->
+    <div id="screen-charging" class="absolute inset-0 flex items-center justify-center z-40 hidden" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);">
+      <div class="text-center">
+        <div id="charging-timer-display" class="text-9xl font-black italic text-transparent bg-clip-text bg-gradient-to-br from-[#FF0066] to-[#00E5FF] animate-pulse glow-cyan">3</div>
+        <p class="text-white mt-6 tracking-widest font-bold text-xl">GET READY</p>
+      </div>
+    </div>
+
+    <!-- State 3: Battle Screen -->
+    <div id="screen-battle" class="absolute inset-0 w-full h-full z-10 hidden flex flex-col justify-between pb-10 pt-4">
+      
+      <!-- Top Section -->
+      <div class="px-4">
+        <div class="bg-gradient-header p-4 shadow-lg flex flex-col items-center">
+          <div id="charging-timer" class="text-4xl font-black text-magenta glow-magenta tracking-widest mb-1">00:15</div>
+          <div class="text-[10px] text-white/80 tracking-widest mb-4 uppercase font-bold">SERI SURABAYA | MATCH DAY 1</div>
+          
+          <div class="w-full flex gap-2">
+            <div class="inner-card flex-1 p-2 flex items-center justify-between">
+              <svg class="w-8 h-8 text-white/50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              <div class="flex-1 text-right ml-2">
+                <div id="label-school-a-battle" class="text-[11px] font-bold leading-tight truncate">SMK YASMU</div>
+                <div class="text-[10px] text-magenta font-black">KICKER</div>
+              </div>
+            </div>
+            
+            <div class="inner-card flex-1 p-2 flex items-center justify-between flex-row-reverse">
+              <svg class="w-8 h-8 text-white/50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              <div class="flex-1 text-left mr-2">
+                <div id="label-school-b-battle" class="text-[11px] font-bold leading-tight truncate">SMA ARUTTA</div>
+                <div class="text-[10px] text-cyan font-black">GOALIE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tug of War Section -->
+      <div class="px-4 mt-6">
+        <div class="flex justify-between text-xs font-black mb-2">
+          <span class="text-magenta glow-magenta">KICKER: <span id="score-a">0</span> TAP</span>
+          <span class="text-cyan glow-cyan">GOALIE: <span id="score-b">0</span> TAP</span>
+        </div>
+        <div class="tug-bar-wrapper flex">
+          <div id="bar-a" class="bar-magenta-fill" style="width:50%"></div>
+          <div id="bar-b" class="bar-cyan-fill" style="width:50%"></div>
+          <div class="tug-icon">
+            <svg class="w-6 h-6 text-white drop-shadow-[0_0_5px_#fff]" viewBox="0 0 24 24" fill="currentColor"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Cards Section -->
+      <div class="flex-1 relative flex justify-between items-center px-4 my-6">
+        <div class="battle-card card-kicker">
+          <div class="card-icon icon-magenta">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <div class="text-magenta font-black text-2xl glow-magenta tracking-wide">KICKER</div>
+          <div class="text-[10px] text-white/70 mt-2 font-bold">PLAYER 1 READY</div>
+        </div>
+        
+        <div class="vs-text">VS</div>
+
+        <div class="battle-card card-goalie">
+          <div class="card-icon icon-cyan">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="text-cyan font-black text-2xl glow-cyan tracking-wide">GOALIE</div>
+          <div class="text-[10px] text-white/70 mt-2 font-bold">PLAYER 2 READY</div>
+        </div>
+      </div>
+
+      <!-- Canvas for Tap Particles -->
+      <canvas id="game-canvas"></canvas>
+
+      <!-- Bottom Tap Zone -->
+      <div id="tap-zone" class="w-full relative z-30 tap-zone-active">
+        <div class="tap-btn animate-tap">TAP NOW!</div>
+      </div>
+      
+    </div>
+
+    <!-- State 4: Outcome -->
+    <div id="screen-outcome" class="absolute inset-0 flex flex-col items-center justify-center bg-black/95 z-50 p-6 hidden">
+      <h2 id="outcome-title" class="text-6xl font-black italic -skew-x-12 mb-2 text-magenta glow-magenta">GOAL!</h2>
+      <p id="outcome-desc" class="text-xl font-bold text-gray-300 mb-8 text-center">KICKER WINS</p>
+      
+      <div class="bg-gray-900 border-2 border-white/20 w-full rounded-2xl p-6 mb-8">
+        <h3 class="text-sm font-bold text-center border-b border-white/20 pb-4 mb-4 tracking-widest">MATCH STATS</h3>
+        <div class="flex justify-between items-center mb-4">
+          <span id="stat-name-a" class="font-bold text-magenta">School A</span>
+          <span id="stat-score-a" class="text-2xl font-black">0</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span id="stat-name-b" class="font-bold text-cyan">School B</span>
+          <span id="stat-score-b" class="text-2xl font-black">0</span>
+        </div>
+      </div>
+
+      <button onclick="alert('Shared!')" class="w-full bg-gradient-header text-white font-black text-xl py-4 rounded-full shadow-[0_0_15px_#FF0066] hover:scale-105 transition-transform">
+        SHARE RESULT
+      </button>
+    </div>
+
+  </div>
+
+  <script src="/js/gameEngine.js"></script>
+</body>
+</html>

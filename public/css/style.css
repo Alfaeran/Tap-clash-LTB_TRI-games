@@ -1,0 +1,168 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+
+:root {
+  --magenta: #FF0066;
+  --cyan: #00E5FF;
+  --dark-glass: rgba(15, 15, 15, 0.7);
+  --font-main: 'Inter', sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #000;
+  font-family: var(--font-main);
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  color: white;
+}
+
+#game-container {
+  background-image: url('/assets/stadium_bg.png');
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+
+/* Overlays */
+.overlay-dark {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  position: absolute;
+  inset: 0;
+}
+
+/* Gradients and Shadows */
+.bg-gradient-header {
+  background: linear-gradient(90deg, #FF0066 0%, #00E5FF 100%);
+  border-radius: 16px;
+}
+
+.inner-card {
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Typography */
+.text-magenta { color: var(--magenta); }
+.text-cyan { color: var(--cyan); }
+.glow-magenta { text-shadow: 0 0 10px var(--magenta); }
+.glow-cyan { text-shadow: 0 0 10px var(--cyan); }
+
+/* Tug of War Bar */
+.tug-bar-wrapper {
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--cyan);
+  border-radius: 9999px;
+  box-shadow: 0 0 15px var(--cyan);
+  height: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.bar-magenta-fill {
+  background: var(--magenta);
+  height: 100%;
+  box-shadow: 0 0 10px var(--magenta);
+  transition: width 0.1s linear;
+}
+
+.bar-cyan-fill {
+  background: var(--cyan);
+  height: 100%;
+  box-shadow: 0 0 10px var(--cyan);
+  transition: width 0.1s linear;
+}
+
+.tug-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+
+/* Battle Cards */
+.battle-card {
+  background: var(--dark-glass);
+  border-radius: 16px;
+  backdrop-filter: blur(8px);
+  width: 45%;
+  aspect-ratio: 1 / 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.card-kicker {
+  border: 2px solid var(--magenta);
+  box-shadow: inset 0 0 20px rgba(255, 0, 102, 0.2);
+}
+
+.card-goalie {
+  border: 2px solid var(--cyan);
+  box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.2);
+}
+
+.card-icon svg {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+}
+
+.icon-magenta { stroke: var(--magenta); filter: drop-shadow(0 0 10px var(--magenta)); }
+.icon-cyan { stroke: var(--cyan); filter: drop-shadow(0 0 10px var(--cyan)); }
+
+/* VS Text */
+.vs-text {
+  font-size: 3rem;
+  font-weight: 900;
+  font-style: italic;
+  text-shadow: 0 0 20px rgba(255,255,255,0.8);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+
+/* Tap Button */
+.tap-btn {
+  background: rgba(10, 20, 40, 0.9);
+  border: 2px solid white;
+  border-radius: 9999px;
+  box-shadow: 0 0 20px var(--cyan), inset 0 0 10px var(--cyan);
+  color: white;
+  font-size: 2.5rem;
+  font-weight: 900;
+  font-style: italic;
+  padding: 12px 0;
+  width: 80%;
+  text-align: center;
+  text-shadow: 0 0 10px white;
+  margin: 0 auto;
+}
+
+/* Animations */
+@keyframes pulseGlow {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-tap {
+  animation: pulseGlow 1s infinite ease-in-out;
+}
+
+/* Canvas for tap particles only */
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
