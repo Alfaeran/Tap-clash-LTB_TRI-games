@@ -13,18 +13,25 @@ const io = new Server(server);
 const redis = new Redis(gameSettings.REDIS_URL);
 redis.on('error', (err) => console.error('Redis Client Error', err));
 
-// Serve static files
+const { createProxyMiddleware } = require('http-proxy-middleware');
+const { fork } = require('child_process');
+
+// Start React SSR Server on port 3001
+const ssrServer = fork(path.join(__dirname, 'client', '.output', 'server', 'index.mjs'), {
+  env: { ...process.env, PORT: 3001 }
+});
+
+ssrServer.on('error', (err) => console.error('SSR Server Error:', err));
+
+// Serve static assets from the root 'public' folder (like logos, images)
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'index.html'));
-});
-
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'admin.html'));
-});
+// Proxy all frontend requests to React SSR Server
+app.use('/', createProxyMiddleware({ 
+  target: 'http://localhost:3001', 
+  changeOrigin: true 
+}));
 
 // Game State Enum
 const STATES = {
@@ -61,23 +68,26 @@ io.on('connection', (socket) => {
   // USER EVENTS
   // ==============================
   socket.on('USER_JOIN_SESSION', (payload) => {
-    // payload: { phoneNum, selectedSchoolCard }
+    // payload: { phoneNum, selectedSchoolCard, side }
     socket.join(payload.selectedSchoolCard); // Join room for the school
     console.log(`User ${payload.phoneNum} joined school ${payload.selectedSchoolCard}`);
+    // Broadcast to all clients (including Admin) that a player joined
+    io.emit('PLAYER_JOINED', payload);
   });
 
-  socket.on('SUBMIT_TAPS', async (payload) => {
-    // payload: { matchId, schoolCard, tapBatchCount }
+  socket.on('TAP', async (payload) => {
+    // payload: { matchId, team }
     if (currentGameState !== STATES.TAP_BATTLE) return;
-    if (payload.matchId !== currentMatch.id) return;
-    if (payload.tapBatchCount <= 0) return;
+    
+    const schoolCard = payload.team === 'A' ? currentMatch.schoolA : currentMatch.schoolB;
+    if (!schoolCard) return;
 
     // Atomic increment in Redis
     try {
-      const key = `match:${payload.matchId}:school:${payload.schoolCard}:taps`;
-      await redis.incrby(key, payload.tapBatchCount);
+      const key = `match:${currentMatch.id}:school:${schoolCard}:taps`;
+      await redis.incr(key);
     } catch (err) {
-      console.error('Redis INCRBY error:', err);
+      console.error('Redis INCR error:', err);
     }
   });
 
@@ -119,6 +129,17 @@ io.on('connection', (socket) => {
 
   socket.on('ADMIN_STOP_BATTLE', async () => {
     await endBattle();
+  });
+
+  socket.on('ADMIN_RESET', () => {
+    currentGameState = STATES.SETUP;
+    currentMatch = {
+      id: null,
+      schoolA: null,
+      schoolB: null,
+      seriesCity: null,
+    };
+    io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
   });
 
   socket.on('disconnect', () => {
@@ -163,19 +184,32 @@ async function endBattle() {
   ]);
 
   let winnerSchool = 'DRAW';
-  if (tapsA > tapsB) winnerSchool = currentMatch.schoolA;
-  else if (tapsB > tapsA) winnerSchool = currentMatch.schoolB;
+  let winnerTeam = null;
+  if (tapsA > tapsB) {
+    winnerSchool = currentMatch.schoolA;
+    winnerTeam = 'A';
+  } else if (tapsB > tapsA) {
+    winnerSchool = currentMatch.schoolB;
+    winnerTeam = 'B';
+  }
+
+  // Award +1 to the winner in the overall series score
+  if (winnerSchool !== 'DRAW') {
+    try {
+      await redis.incr(`series:school:${winnerSchool}:score`);
+    } catch (err) {
+      console.error('Failed to update series score:', err);
+    }
+  }
 
   const matchResult = {
+    winner: winnerTeam,
+    finalScoreA: tapsA,
+    finalScoreB: tapsB,
     winnerSchool,
-    totalTaps: {
-      [currentMatch.schoolA]: tapsA,
-      [currentMatch.schoolB]: tapsB
-    },
-    topMVPUsers: [] // Real implementation would track users, but for scope we mock
   };
 
-  io.emit('MATCH_OVER', matchResult);
+  io.emit('MATCH_END', matchResult);
   io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
 
   // Transition to Leaderboard automatically after outcome animation
