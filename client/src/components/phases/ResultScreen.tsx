@@ -22,11 +22,12 @@ export default function ResultScreen() {
   const scoreKickerRef = useRef<HTMLSpanElement>(null);
   const scoreGoalieRef = useRef<HTMLSpanElement>(null);
 
-  // Auto-redirect to twibbon after animation
+  // Auto-redirect to leaderboard when backend transitions
   useEffect(() => {
-    const t = setTimeout(() => navigate({ to: "/twibbon" }), 7000);
-    return () => clearTimeout(t);
-  }, [navigate]);
+    if (match.status === 'leaderboard') {
+      navigate({ to: "/leaderboard" });
+    }
+  }, [match.status, navigate]);
 
   // Animate score counting up
   useEffect(() => {

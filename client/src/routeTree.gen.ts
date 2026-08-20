@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminLiveRouteImport } from './routes/admin-live'
+import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as TwibbonRouteImport } from './routes/twibbon'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const AdminLiveRoute = AdminLiveRouteImport.update({
   path: '/admin-live',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeaderboardRoute = LeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TwibbonRoute = TwibbonRouteImport.update({
   id: '/twibbon',
   path: '/twibbon',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/admin-live': typeof AdminLiveRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/twibbon': typeof TwibbonRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/admin-live': typeof AdminLiveRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/twibbon': typeof TwibbonRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/admin-live': typeof AdminLiveRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/twibbon': typeof TwibbonRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/admin-live' | '/twibbon'
+  fullPaths: '/' | '/admin' | '/admin-live' | '/leaderboard' | '/twibbon'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/admin-live' | '/twibbon'
-  id: '__root__' | '/' | '/admin' | '/admin-live' | '/twibbon'
+  to: '/' | '/admin' | '/admin-live' | '/leaderboard' | '/twibbon'
+  id: '__root__' | '/' | '/admin' | '/admin-live' | '/leaderboard' | '/twibbon'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AdminLiveRoute: typeof AdminLiveRoute
+  LeaderboardRoute: typeof LeaderboardRoute
   TwibbonRoute: typeof TwibbonRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/leaderboard': {
+      id: '/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/twibbon': {
       id: '/twibbon'
       path: '/twibbon'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AdminLiveRoute: AdminLiveRoute,
+  LeaderboardRoute: LeaderboardRoute,
   TwibbonRoute: TwibbonRoute,
 }
 export const routeTree = rootRouteImport

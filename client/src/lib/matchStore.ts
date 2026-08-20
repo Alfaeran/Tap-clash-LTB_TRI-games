@@ -3,7 +3,7 @@ import { z } from "zod";
 import { io } from "socket.io-client";
 
 export type DuelSide = "kicker" | "goalie";
-export type MatchStatus = "lobby" | "charging" | "live" | "finished";
+export type MatchStatus = "lobby" | "charging" | "live" | "finished" | "leaderboard";
 
 export interface PlayerInfo {
   name: string;
@@ -24,6 +24,14 @@ export interface MatchState {
   playerSide: DuelSide | null;
   isConnected: boolean;
   matchId: string | null;
+  leaderboard: Array<{
+    school: string;
+    points: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    taps: number;
+  }>;
 }
 
 export const CHARGING_MS = 3200;
@@ -41,6 +49,7 @@ const DEFAULT_STATE: MatchState = {
   playerSide: null,
   isConnected: false,
   matchId: null,
+  leaderboard: [],
 };
 
 export const playerSchema = z.object({
@@ -83,7 +92,8 @@ function initSocket() {
     if (data.state === 'STATE_CARD_SELECT') nextStatus = 'lobby'; // Card select is still lobby phase for players
     if (data.state === 'STATE_CHARGING') nextStatus = 'charging';
     if (data.state === 'STATE_TAP_BATTLE') nextStatus = 'live';
-    if (data.state === 'STATE_OUTCOME_ANIMATION' || data.state === 'STATE_LEADERBOARD') nextStatus = 'finished';
+    if (data.state === 'STATE_OUTCOME_ANIMATION') nextStatus = 'finished';
+    if (data.state === 'STATE_LEADERBOARD') nextStatus = 'leaderboard';
 
     set({ 
       status: nextStatus,
@@ -140,6 +150,10 @@ function initSocket() {
       winner,
       taps: { kicker: data.finalScoreA, goalie: data.finalScoreB }
     });
+  });
+
+  socket.on('LEADERBOARD_DATA', (data: any) => {
+    set({ leaderboard: data.leaderboard });
   });
 }
 

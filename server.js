@@ -226,12 +226,25 @@ async function endBattle() {
   }
 
   // Award +1 to the winner in the overall series score
-  if (winnerSchool !== 'DRAW') {
-    try {
-      await redis.incr(`series:school:${winnerSchool}:score`);
-    } catch (err) {
-      console.error('Failed to update series score:', err);
+  try {
+    if (winnerSchool !== 'DRAW') {
+      await redis.hincrby(`series:school:${winnerSchool}:stats`, 'wins', 1);
+      await redis.hincrby(`series:school:${winnerSchool}:stats`, 'points', 3);
+      
+      const loserSchool = winnerSchool === currentMatch.schoolA ? currentMatch.schoolB : currentMatch.schoolA;
+      await redis.hincrby(`series:school:${loserSchool}:stats`, 'losses', 1);
+    } else {
+      await redis.hincrby(`series:school:${currentMatch.schoolA}:stats`, 'draws', 1);
+      await redis.hincrby(`series:school:${currentMatch.schoolB}:stats`, 'draws', 1);
+      await redis.hincrby(`series:school:${currentMatch.schoolA}:stats`, 'points', 1);
+      await redis.hincrby(`series:school:${currentMatch.schoolB}:stats`, 'points', 1);
     }
+
+    // Cumulative taps
+    await redis.hincrby(`series:school:${currentMatch.schoolA}:stats`, 'taps', tapsA);
+    await redis.hincrby(`series:school:${currentMatch.schoolB}:stats`, 'taps', tapsB);
+  } catch (err) {
+    console.error('Failed to update series stats:', err);
   }
 
   const matchResult = {
@@ -245,9 +258,37 @@ async function endBattle() {
   io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
 
   // Transition to Leaderboard automatically after outcome animation
-  setTimeout(() => {
+  setTimeout(async () => {
     currentGameState = STATES.LEADERBOARD;
+    
+    // Fetch leaderboard
+    let leaderboard = [];
+    try {
+      const keys = await redis.keys('series:school:*:stats');
+      for (const key of keys) {
+        // key format: series:school:SCHOOL_NAME:stats
+        // using a regex or split to extract school name
+        const schoolName = key.split(':')[2];
+        const stats = await redis.hgetall(key);
+        leaderboard.push({
+          school: schoolName,
+          points: parseInt(stats.points || 0, 10),
+          wins: parseInt(stats.wins || 0, 10),
+          losses: parseInt(stats.losses || 0, 10),
+          draws: parseInt(stats.draws || 0, 10),
+          taps: parseInt(stats.taps || 0, 10),
+        });
+      }
+      leaderboard.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        return b.taps - a.taps;
+      });
+    } catch (err) {
+      console.error('Failed to fetch leaderboard:', err);
+    }
+
     io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
+    io.emit('LEADERBOARD_DATA', { leaderboard });
   }, 5000); // 5 seconds outcome animation
 }
 
