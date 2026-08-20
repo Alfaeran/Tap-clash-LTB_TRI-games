@@ -13,14 +13,27 @@ export default function LeaderboardScreen() {
   const match = useMatch();
   const leaderboard = match.leaderboard || [];
   const listRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 1. Container pop-up animation
+    if (containerRef.current) {
+      anime({
+        targets: containerRef.current,
+        scale: [0.8, 1],
+        opacity: [0, 1],
+        duration: 600,
+        easing: "easeOutBack", // Gives that bouncy "pop" effect
+      });
+    }
+
+    // 2. List item stagger animation
     if (listRef.current && leaderboard.length > 0) {
       anime({
         targets: listRef.current.children,
         translateX: [-40, 0],
         opacity: [0, 1],
-        delay: anime.stagger(100),
+        delay: anime.stagger(100, { start: 200 }), // Wait a bit for container to pop first
         duration: 600,
         easing: "easeOutExpo",
       });
@@ -29,7 +42,7 @@ export default function LeaderboardScreen() {
 
   return (
     <DuelFrame>
-      <div className="relative z-10 flex h-full flex-col gap-4 overflow-y-auto px-5 py-6">
+      <div ref={containerRef} className="relative z-10 flex h-full flex-col gap-4 overflow-y-auto px-5 py-6 opacity-0">
         <header className="text-center">
           <p className="font-tech text-[10px] tracking-[0.4em] text-white/45">
             {match.seriesLabel}
