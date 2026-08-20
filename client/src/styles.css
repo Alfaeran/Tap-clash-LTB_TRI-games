@@ -2,7 +2,19 @@
 @source "../src";
 @import "tw-animate-css";
 
+/* Fallback esports font from Google Fonts when Ooredoo is unavailable */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
 @custom-variant dark (&:is(.dark *));
+
+/* Custom brand font */
+@font-face {
+  font-family: "Ooredoo";
+  src: url("/fonts/Ooredoo-Heavy.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 /*
  * Design system definition.
@@ -140,8 +152,8 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 700;
+    font-family: "Ooredoo", "Orbitron", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 900;
   }
 }
 
@@ -154,8 +166,8 @@
   --color-tri-cyan: #00e5ff;
   --color-tri-glass: #1a1a1a;
   --color-tri-danger: #ff2d2d;
-  --font-display: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-tech: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: "Ooredoo", "Orbitron", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-tech: "Ooredoo", "Orbitron", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 @keyframes tri-breathe {
@@ -296,6 +308,56 @@
   }
 }
 
+@keyframes tri-tap-ripple {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+@keyframes tri-count-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tri-gradient-border {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes tri-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px var(--glow-color, #00e5ff),
+                0 0 30px color-mix(in oklab, var(--glow-color, #00e5ff) 50%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 25px var(--glow-color, #00e5ff),
+                0 0 50px color-mix(in oklab, var(--glow-color, #00e5ff) 70%, transparent),
+                0 0 80px color-mix(in oklab, var(--glow-color, #00e5ff) 30%, transparent);
+  }
+}
+
 @utility tri-glass {
   background: color-mix(in oklab, var(--color-tri-glass) 72%, transparent);
   backdrop-filter: blur(14px) saturate(140%);
@@ -313,5 +375,29 @@
   text-shadow:
     0 0 6px color-mix(in oklab, var(--color-tri-cyan) 90%, transparent),
     0 0 22px color-mix(in oklab, var(--color-tri-cyan) 60%, transparent);
+}
+
+/* Custom scrollbar for school lists and overflow areas */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Tap ripple visual feedback */
+.tap-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: tri-tap-ripple 0.5s ease-out forwards;
 }
 

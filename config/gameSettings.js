@@ -1,6 +1,6 @@
 module.exports = {
   // Game parameters
-  BATTLE_DURATION_MS: 15000, // 15 seconds active phase
+  BATTLE_DURATION_MS: 60000, // 60 seconds (1 minute) active phase
   COUNTDOWN_DURATION_MS: 3000, // 3 seconds charging phase
   
   // Client-server batching rate

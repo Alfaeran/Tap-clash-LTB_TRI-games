@@ -8,28 +8,22 @@ const CYAN = "#00E5FF";
 
 export default function LoginScreen() {
   const match = useMatch();
-  const [name, setName] = useState("");
   const [school, setSchool] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const side: DuelSide | null = school === match.schools[0] ? "kicker" : school === match.schools[1] ? "goalie" : null;
   const color = side === "kicker" ? MAGENTA : side === "goalie" ? CYAN : "#FFFFFF";
-  const joined = side ? match.players[side] : false;
-  const bothReady = Boolean(match.players.kicker && match.players.goalie);
+  const joined = side ? match.playerSide === side : false;
+  const bothReady = match.playerCounts.kicker > 0 && match.playerCounts.goalie > 0;
 
   const submit = () => {
     if (!side) {
       setError("Silakan pilih sekolah");
       return;
     }
-    const result = playerSchema.safeParse({ name, school });
-    if (!result.success) {
-      setError(result.error.issues[0]?.message ?? "Data belum lengkap");
-      return;
-    }
     setError(null);
-    matchActions.join(side, result.data);
-    setName("");
+    // Since name is not inputted here, we pass an empty string or default name
+    matchActions.join(side, { name: "", school });
   };
 
   return (
@@ -43,25 +37,13 @@ export default function LoginScreen() {
             TRI LTB <span className="tri-text-magenta">1v1</span> DUEL
           </h1>
           <p className="font-tech text-[11px] tracking-[0.3em] text-white/50">
-            REGISTRASI PEMAIN
+            {match.isConnected ? "REGISTRASI PEMAIN" : "MENGHUBUNGKAN..."}
           </p>
         </header>
 
         {/* role picker removed */}
         <div className="tri-glass flex flex-col gap-3 rounded-2xl border border-white/15 p-4">
-          <label className="flex flex-col gap-1">
-            <span className="font-tech text-[10px] tracking-[0.3em] text-white/55">
-              NAMA PEMAIN
-            </span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={24}
-              placeholder="Ketik nama kamu"
-              className="rounded-xl border-2 bg-black/50 px-3 py-2.5 font-tech text-base font-semibold tracking-wide text-white outline-none placeholder:text-white/25"
-              style={{ borderColor: `${color}66` }}
-            />
-          </label>
+          {/* NAMA PEMAIN input removed */}
 
           <div className="flex flex-col gap-1">
             <span className="font-tech text-[10px] tracking-[0.3em] text-white/55">
@@ -85,16 +67,21 @@ export default function LoginScreen() {
                     }}
                   >
                     <div className="flex justify-between items-center">
-                       <span>{s}</span>
-                       <span className="text-[10px] tracking-[0.2em] opacity-70" style={{ color: c }}>{roleLabel}</span>
+                      <span>{s}</span>
+                      <span className="text-[10px] tracking-[0.2em] opacity-70" style={{ color: c }}>{roleLabel}</span>
                     </div>
                   </button>
                 );
               })}
               {match.schools.length === 0 && (
-                <p className="font-tech text-xs text-white/45">
-                  Admin belum menambahkan sekolah.
-                </p>
+                <div className="flex flex-col items-center justify-center p-6 text-center animate-pulse">
+                  <p className="font-tech text-xs text-white/60 mb-2 font-bold tracking-[0.1em]">
+                    MENUNGGU LOBBY...
+                  </p>
+                  <p className="font-tech text-[9px] text-white/40 tracking-[0.05em]">
+                    Admin belum menambahkan sekolah untuk match ini.
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -111,7 +98,7 @@ export default function LoginScreen() {
             className="rounded-xl border-2 border-white/60 bg-black/60 py-3 font-display text-sm font-black tracking-[0.25em] text-white transition-transform active:scale-95"
             style={{ boxShadow: `0 0 22px ${color}` }}
           >
-            {joined ? "GANTI PEMAIN" : "MASUK ARENA"}
+            {joined ? "GANTI TEAM" : "MASUK ARENA"}
           </button>
         </div>
 

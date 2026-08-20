@@ -20,6 +20,7 @@ export default function BattleScreen() {
   useEffect(() => {
     let frame = 0;
     let last = performance.now();
+    let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
     const loop = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
@@ -33,16 +34,34 @@ export default function BattleScreen() {
 
       const left = Math.max(0, (match.endsAt ?? 0) - Date.now());
       setRemainingMs(left);
-      if (left === 0) matchActions.finish();
-      else frame = requestAnimationFrame(loop);
+      if (left === 0) {
+        // BUG-3 safety: if server MATCH_END is delayed, force transition after 2s
+        if (!safetyTimeout) {
+          safetyTimeout = setTimeout(() => {
+            // Only force if still stuck on 'live'
+            if (match.status === 'live') {
+              matchActions.finish();
+            }
+          }, 2000);
+        }
+      } else {
+        frame = requestAnimationFrame(loop);
+      }
     };
     frame = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frame);
-  }, [match.endsAt]);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (safetyTimeout) clearTimeout(safetyTimeout);
+    };
+  }, [match.endsAt, match.status]);
 
   const tap = (side: DuelSide) => {
     rates.current[side] = Math.min(FRENZY_RATE * 1.4, rates.current[side] + 1.9);
     matchActions.addTap(side);
+    // Haptic feedback on mobile
+    if (navigator.vibrate) {
+      navigator.vibrate(12);
+    }
   };
 
   const total = match.taps.kicker + match.taps.goalie;
@@ -76,19 +95,19 @@ export default function BattleScreen() {
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
             <div className="min-w-0">
               <p className="truncate font-tech text-[11px] font-bold tracking-widest text-white/90">
-                {match.players.kicker?.school ?? "KICKER TEAM"}
+                {match.schools[0] ?? "KICKER TEAM"}
               </p>
               <p className="tri-text-magenta truncate font-tech text-[9px] font-bold tracking-[0.2em]">
-                {match.players.kicker?.name?.toUpperCase() ?? "KICKER"}
+                {match.playerCounts.kicker} PEMAIN
               </p>
             </div>
             <p className="font-display text-[9px] tracking-[0.25em] text-white/50">VS</p>
             <div className="min-w-0 text-right">
               <p className="truncate font-tech text-[11px] font-bold tracking-widest text-white/90">
-                {match.players.goalie?.school ?? "GOALIE TEAM"}
+                {match.schools[1] ?? "GOALIE TEAM"}
               </p>
               <p className="tri-text-cyan truncate font-tech text-[9px] font-bold tracking-[0.2em]">
-                {match.players.goalie?.name?.toUpperCase() ?? "GOALIE"}
+                {match.playerCounts.goalie} PEMAIN
               </p>
             </div>
           </div>
@@ -104,6 +123,7 @@ export default function BattleScreen() {
           taps={match.taps.kicker}
           intensity={intensity.kicker}
           dimmed={dim("kicker")}
+          locked={match.playerSide !== null && match.playerSide !== "kicker"}
           onTap={() => tap("kicker")}
         />
 
@@ -139,6 +159,7 @@ export default function BattleScreen() {
           taps={match.taps.goalie}
           intensity={intensity.goalie}
           dimmed={dim("goalie")}
+          locked={match.playerSide !== null && match.playerSide !== "goalie"}
           onTap={() => tap("goalie")}
         />
 
@@ -159,6 +180,7 @@ function SideCard({
   taps,
   intensity,
   dimmed,
+  locked,
   onTap,
 }: {
   side: DuelSide;
@@ -167,9 +189,12 @@ function SideCard({
   taps: number;
   intensity: number;
   dimmed: boolean;
+  locked: boolean;
   onTap: () => void;
 }) {
   const tapsRef = useRef<HTMLSpanElement>(null);
+  const [pops, setPops] = useState<{ id: number; x: number; y: number }[]>([]);
+  const tapId = useRef(0);
 
   useEffect(() => {
     if (tapsRef.current) {
@@ -187,27 +212,44 @@ function SideCard({
   const glow = 0.18 + intensity * 0.8;
   const alpha = (a: number) => `${color}${Math.round(a * 255).toString(16).padStart(2, "0")}`;
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault(); // BUG-9: prevent text selection, zoom, context menus on mobile
+    if (locked) return; // BUG-8: don't register taps on locked (opponent's) card
+    onTap();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = tapId.current++;
+    setPops((prev) => [...prev, { id, x, y }]);
+    setTimeout(() => {
+      setPops((prev) => prev.filter((p) => p.id !== id));
+    }, 500);
+  };
+
   return (
     <button
       type="button"
-      onPointerDown={onTap}
+      onPointerDown={handlePointerDown}
+      className="relative min-h-0 w-full overflow-hidden rounded-3xl border-2 backdrop-blur-md"
       style={{
         flex: 1,
-        borderColor: alpha(dimmed ? 0.2 : 0.35 + intensity * 0.6),
+        touchAction: 'manipulation', // BUG-9: prevent browser zoom/scroll on rapid taps
+        borderColor: alpha(dimmed || locked ? 0.2 : 0.35 + intensity * 0.6),
         background: `linear-gradient(${side === "kicker" ? "160deg" : "-20deg"}, ${alpha(
           0.16 + intensity * 0.22,
         )}, rgba(26,26,26,0.75))`,
-        boxShadow: dimmed
+        boxShadow: dimmed || locked
           ? `0 0 10px ${alpha(0.12)}`
           : `0 0 ${14 + intensity * 46}px ${alpha(glow)}, inset 0 0 ${
               20 + intensity * 60
             }px ${alpha(glow * 0.5)}`,
-        opacity: dimmed ? 0.4 : 1,
-        animation: intensity > 0.55 ? "tri-vibrate 0.12s linear infinite" : undefined,
+        opacity: locked ? 0.25 : dimmed ? 0.4 : 1,
+        animation: intensity > 0.55 && !locked ? "tri-vibrate 0.12s linear infinite" : undefined,
         transition: "opacity 0.35s linear",
+        pointerEvents: locked ? 'none' : undefined, // BUG-8: disable pointer events on locked card
       }}
-      className="relative min-h-0 w-full overflow-hidden rounded-3xl border-2 backdrop-blur-md"
-      aria-label={`Tap untuk ${label}`}
+      aria-label={locked ? `${label} (terkunci)` : `Tap untuk ${label}`}
+      aria-disabled={locked}
     >
       {idle && (
         <span
@@ -265,6 +307,26 @@ function SideCard({
           {idle ? "DORMANT" : intensity > 0.6 ? "OVERDRIVE" : "TAPS"}
         </span>
       </div>
+      
+      {/* Comic TAP! effect overlay */}
+      {pops.map((pop) => (
+        <span
+          key={pop.id}
+          className="absolute z-50 pointer-events-none font-display font-black italic"
+          style={{
+            left: pop.x,
+            top: pop.y,
+            transform: "translate(-50%, -50%)",
+            fontSize: "2.5rem",
+            color: color,
+            WebkitTextStroke: "1.5px #fff",
+            textShadow: `0 0 10px ${color}, 3px 3px 0px #fff`,
+            animation: "tri-burst-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
+          }}
+        >
+          TAP!
+        </span>
+      ))}
     </button>
   );
 }

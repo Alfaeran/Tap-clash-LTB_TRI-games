@@ -16,18 +16,28 @@ redis.on('error', (err) => console.error('Redis Client Error', err));
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { fork } = require('child_process');
 
-// Start React SSR Server on port 3001
 const ssrServer = fork(path.join(__dirname, 'client', '.output', 'server', 'index.mjs'), {
   env: { ...process.env, PORT: 3001 }
 });
 
 ssrServer.on('error', (err) => console.error('SSR Server Error:', err));
 
+// Properly clean up child process when parent dies to avoid orphaned zombie processes holding port 3001
+const cleanupAndExit = () => {
+  if (ssrServer) ssrServer.kill();
+  process.exit();
+};
+process.on('SIGINT', cleanupAndExit);
+process.on('SIGTERM', cleanupAndExit);
+process.on('exit', () => { if (ssrServer) ssrServer.kill(); });
+
 // Serve static assets from the root 'public' folder (like logos, images)
+// NOTE: Must be registered BEFORE the proxy to avoid shadowing
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // Proxy all frontend requests to React SSR Server
+// (only proxies requests not matched by static files above)
 app.use('/', createProxyMiddleware({ 
   target: 'http://localhost:3001', 
   changeOrigin: true 
@@ -58,27 +68,40 @@ let broadcastInterval = null;
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
+  const getPlayerCounts = () => {
+    const countA = currentMatch.schoolA ? (io.sockets.adapter.rooms.get(currentMatch.schoolA)?.size || 0) : 0;
+    const countB = currentMatch.schoolB ? (io.sockets.adapter.rooms.get(currentMatch.schoolB)?.size || 0) : 0;
+    return { kicker: countA, goalie: countB };
+  };
+
   // Send current state to new connections
   socket.emit('STATE_UPDATE', {
     state: currentGameState,
-    match: currentMatch
+    match: currentMatch,
+    playerCounts: getPlayerCounts()
   });
 
   // ==============================
-  // USER EVENTS
-  // ==============================
   socket.on('USER_JOIN_SESSION', (payload) => {
-    // payload: { phoneNum, selectedSchoolCard, side }
+    // payload: { selectedSchoolCard, side }
+    if (socket.schoolRoom) {
+      socket.leave(socket.schoolRoom);
+    }
+    socket.schoolRoom = payload.selectedSchoolCard;
     socket.join(payload.selectedSchoolCard); // Join room for the school
-    console.log(`User ${payload.phoneNum} joined school ${payload.selectedSchoolCard}`);
-    // Broadcast to all clients (including Admin) that a player joined
-    io.emit('PLAYER_JOINED', payload);
+    console.log(`User joined school ${payload.selectedSchoolCard}`);
+    
+    // Broadcast updated counts to everyone
+    io.emit('PLAYER_COUNT_UPDATE', getPlayerCounts());
   });
 
   socket.on('TAP', async (payload) => {
     // payload: { matchId, team }
     if (currentGameState !== STATES.TAP_BATTLE) return;
     
+    // BUG-10 fix: Ensure tap is for the current match
+    if (payload.matchId && payload.matchId !== currentMatch.id) return;
+
     const schoolCard = payload.team === 'A' ? currentMatch.schoolA : currentMatch.schoolB;
     if (!schoolCard) return;
 
@@ -112,14 +135,15 @@ io.on('connection', (socket) => {
 
     io.emit('STATE_UPDATE', {
       state: currentGameState,
-      match: currentMatch
+      match: currentMatch,
+      playerCounts: getPlayerCounts()
     });
   });
 
   socket.on('ADMIN_START_COUNTDOWN', () => {
     currentGameState = STATES.CHARGING;
     io.emit('START_COUNTDOWN', { duration: gameSettings.COUNTDOWN_DURATION_MS });
-    io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
+    io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch, playerCounts: getPlayerCounts() });
 
     // Transition automatically to TAP_BATTLE after countdown
     setTimeout(() => {
@@ -139,18 +163,26 @@ io.on('connection', (socket) => {
       schoolB: null,
       seriesCity: null,
     };
-    io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
+    io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch, playerCounts: { kicker: 0, goalie: 0 } });
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    if (socket.schoolRoom) {
+      // Delay slightly to let the socket actually leave the room in Socket.io adapter
+      setTimeout(() => {
+        io.emit('PLAYER_COUNT_UPDATE', getPlayerCounts());
+      }, 100);
+    }
   });
 });
 
 function startBattle() {
   if (currentGameState === STATES.TAP_BATTLE) return;
   currentGameState = STATES.TAP_BATTLE;
-  io.emit('START_BATTLE');
+  io.emit('START_BATTLE', { durationMs: gameSettings.BATTLE_DURATION_MS });
+  // Since we don't have access to getPlayerCounts here easily, we just omit or rebuild it if needed.
+  // Actually we can just let clients keep their previous count on START_BATTLE.
   io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
 
   // Start broadcasting ratios

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import anime from "animejs";
 import DuelFrame from "@/components/duel/DuelFrame";
-import { matchActions, useMatch } from "@/lib/matchStore";
+import { useMatch } from "@/lib/matchStore";
 
 const MAGENTA = "#FF0066";
 const CYAN = "#00E5FF";
@@ -16,8 +16,8 @@ export default function ChargingScreen() {
     const loop = () => {
       const left = Math.max(0, (match.chargingEndsAt ?? 0) - Date.now());
       setRemaining(left);
-      if (left === 0) matchActions.goLive();
-      else frame = requestAnimationFrame(loop);
+      // Don't call matchActions.goLive() — server drives the lobby→live transition
+      if (left > 0) frame = requestAnimationFrame(loop);
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
@@ -72,19 +72,13 @@ export default function ChargingScreen() {
           <div className="tri-glass rounded-2xl border-2 px-3 py-3" style={{ borderColor: `${MAGENTA}88` }}>
             <p className="tri-text-magenta font-display text-xs font-black tracking-[0.25em]">KICKER</p>
             <p className="font-tech text-sm font-bold text-white">
-              {match.players.kicker?.name ?? "—"}
-            </p>
-            <p className="font-tech text-[9px] tracking-[0.2em] text-white/45">
-              {match.players.kicker?.school ?? ""}
+              {match.schools[0] ?? "—"}
             </p>
           </div>
           <div className="tri-glass rounded-2xl border-2 px-3 py-3" style={{ borderColor: `${CYAN}88` }}>
             <p className="tri-text-cyan font-display text-xs font-black tracking-[0.25em]">GOALIE</p>
             <p className="font-tech text-sm font-bold text-white">
-              {match.players.goalie?.name ?? "—"}
-            </p>
-            <p className="font-tech text-[9px] tracking-[0.2em] text-white/45">
-              {match.players.goalie?.school ?? ""}
+              {match.schools[1] ?? "—"}
             </p>
           </div>
         </div>

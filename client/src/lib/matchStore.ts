@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { io } from "socket.io-client";
 
@@ -15,11 +15,15 @@ export interface MatchState {
   seriesLabel: string;
   durationSec: number;
   status: MatchStatus;
-  players: { kicker: PlayerInfo | null; goalie: PlayerInfo | null };
+  playerCounts: { kicker: number; goalie: number };
   taps: { kicker: number; goalie: number };
   chargingEndsAt: number | null;
   endsAt: number | null;
-  winner: DuelSide | null;
+  winner: DuelSide | "draw" | null;
+  /** Which side the local player chose (for team-locked tapping) */
+  playerSide: DuelSide | null;
+  isConnected: boolean;
+  matchId: string | null;
 }
 
 export const CHARGING_MS = 3200;
@@ -29,11 +33,14 @@ const DEFAULT_STATE: MatchState = {
   seriesLabel: "SERI SURABAYA · MATCH DAY 1",
   durationSec: 60,
   status: "lobby",
-  players: { kicker: null, goalie: null },
+  playerCounts: { kicker: 0, goalie: 0 },
   taps: { kicker: 0, goalie: 0 },
   chargingEndsAt: null,
   endsAt: null,
   winner: null,
+  playerSide: null,
+  isConnected: false,
+  matchId: null,
 };
 
 export const playerSchema = z.object({
@@ -67,27 +74,32 @@ function initSocket() {
   
   socket = io();
 
+  socket.on('connect', () => set({ isConnected: true }));
+  socket.on('disconnect', () => set({ isConnected: false }));
+
   socket.on('STATE_UPDATE', (data: any) => {
     // Map backend states to frontend MatchStatus
     let nextStatus: MatchStatus = 'lobby';
+    if (data.state === 'STATE_CARD_SELECT') nextStatus = 'lobby'; // Card select is still lobby phase for players
     if (data.state === 'STATE_CHARGING') nextStatus = 'charging';
     if (data.state === 'STATE_TAP_BATTLE') nextStatus = 'live';
-    if (data.state === 'STATE_OUTCOME' || data.state === 'STATE_LEADERBOARD') nextStatus = 'finished';
+    if (data.state === 'STATE_OUTCOME_ANIMATION' || data.state === 'STATE_LEADERBOARD') nextStatus = 'finished';
 
     set({ 
       status: nextStatus,
       schools: data.match && data.match.schoolA ? [data.match.schoolA, data.match.schoolB] : state.schools,
-      seriesLabel: data.match && data.match.seriesCity ? `${data.match.seriesCity} · MATCH DAY 1` : state.seriesLabel
+      seriesLabel: data.match && data.match.seriesCity ? data.match.seriesCity : state.seriesLabel,
+      playerCounts: data.playerCounts || state.playerCounts,
+      matchId: data.match && data.match.id ? data.match.id : state.matchId
     });
   });
 
+  socket.on('PLAYER_COUNT_UPDATE', (counts: { kicker: number, goalie: number }) => {
+    set({ playerCounts: counts });
+  });
+
   socket.on('PLAYER_JOINED', (data: any) => {
-    set({
-      players: {
-        ...state.players,
-        [data.side]: { name: data.phoneNum, school: data.selectedSchoolCard }
-      }
-    });
+    // Kept for backward compatibility but counts are preferred
   });
 
   socket.on('START_COUNTDOWN', (data: any) => {
@@ -100,11 +112,13 @@ function initSocket() {
     });
   });
 
-  socket.on('START_BATTLE', () => {
+  socket.on('START_BATTLE', (data: any) => {
+    const durationMs = data?.durationMs ?? state.durationSec * 1000;
     set({
       status: "live",
       chargingEndsAt: null,
-      endsAt: Date.now() + state.durationSec * 1000, // Wait, maybe server defines this, we default to 60s
+      durationSec: Math.round(durationMs / 1000),
+      endsAt: Date.now() + durationMs,
     });
   });
 
@@ -115,10 +129,15 @@ function initSocket() {
   });
 
   socket.on('MATCH_END', (data: any) => {
+    let winner: DuelSide | "draw" | null = null;
+    if (data.winner === 'A') winner = 'kicker';
+    else if (data.winner === 'B') winner = 'goalie';
+    else winner = 'draw';
+    
     set({
       status: "finished",
       endsAt: null,
-      winner: data.winner === 'A' ? 'kicker' : (data.winner === 'B' ? 'goalie' : null),
+      winner,
       taps: { kicker: data.finalScoreA, goalie: data.finalScoreB }
     });
   });
@@ -140,17 +159,16 @@ export const matchActions = {
     set({ durationSec: Math.min(300, Math.max(10, Math.round(durationSec))) });
   },
   join(side: DuelSide, info: PlayerInfo) {
-    set({ players: { ...state.players, [side]: info } });
+    set({ playerSide: side });
     if (socket) {
       socket.emit('USER_JOIN_SESSION', { 
-        phoneNum: info.name, 
         selectedSchoolCard: info.school,
         side: side
       });
     }
   },
   leave(side: DuelSide) {
-    set({ players: { ...state.players, [side]: null } });
+    set({ playerSide: null });
   },
   setupMatch(schoolA: string, schoolB: string, seriesCity: string) {
     set({ schools: [schoolA, schoolB], seriesLabel: seriesCity });
@@ -168,22 +186,37 @@ export const matchActions = {
     }
   },
   goLive() {
-    // Driven by server START_BATTLE
+    // No-op: transition is driven by server START_BATTLE event.
+    // Do NOT call set() here — the server event handler already does it.
   },
   addTap(side: DuelSide) {
     if (state.status !== "live") return;
+    // Only allow tapping for the player's chosen side
+    if (state.playerSide && side !== state.playerSide) return;
     
     // Optimistic UI update
     set({ taps: { ...state.taps, [side]: state.taps[side] + 1 } });
     
     // Emit to server
     if (socket) {
-      const matchId = "current"; // Since server doesn't send matchId until ADMIN_SET_MATCH, actually we can just pass the currentMatch id if we had it, but server uses state internally. Let's just pass matchId: "current" (server check is relaxed if we update server.js)
-      socket.emit('TAP', { team: side === 'kicker' ? 'A' : 'B', matchId: socket.id });
+      socket.emit('TAP', { matchId: state.matchId, team: side === 'kicker' ? 'A' : 'B' });
     }
   },
   finish() {
-    // Driven by server MATCH_END
+    // Safety fallback: force client to 'finished' if server MATCH_END was missed.
+    // If the server event arrives later, it will overwrite with correct data.
+    if (state.status === 'live') {
+      const kickerTaps = state.taps.kicker;
+      const goalieTaps = state.taps.goalie;
+      let winner: DuelSide | "draw" | null = "draw";
+      if (kickerTaps > goalieTaps) winner = "kicker";
+      else if (goalieTaps > kickerTaps) winner = "goalie";
+      set({
+        status: "finished",
+        endsAt: null,
+        winner,
+      });
+    }
   },
   stop() {
     if (socket) socket.emit('ADMIN_STOP_BATTLE');
@@ -191,12 +224,7 @@ export const matchActions = {
   resetMatch() {
     if (socket) socket.emit('ADMIN_RESET');
     set({
-      status: "lobby",
-      taps: { kicker: 0, goalie: 0 },
-      winner: null,
-      endsAt: null,
-      chargingEndsAt: null,
-      players: { kicker: null, goalie: null } // reset players as well
+      ...DEFAULT_STATE,
     });
   },
   resetAll() {
@@ -211,8 +239,8 @@ export function useMatch(): MatchState {
   
   return useSyncExternalStore(
     subscribe,
-    useCallback(() => state, []),
-    useCallback(() => DEFAULT_STATE, []),
+    () => state,
+    () => DEFAULT_STATE,
   );
 }
 

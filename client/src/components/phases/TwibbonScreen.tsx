@@ -32,15 +32,22 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
 }
 
 export default function TwibbonScreen() {
-  const match = useMatch();
+  const currentMatch = useMatch();
+  // Freeze the match state when this component mounts so stats don't change if the server resets or reconnects
+  const [match] = useState(currentMatch);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selfie, setSelfie] = useState<HTMLImageElement | null>(null);
   const [frame, setFrame] = useState<HTMLImageElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [viewerName, setViewerName] = useState("");
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [flash, setFlash] = useState(false);
 
+  const isDraw = match.winner === "draw";
   const win = match.winner === "kicker";
-  const winnerPlayer = win ? match.players.kicker : match.players.goalie;
-  const accent = win ? MAGENTA : CYAN;
+  const winnerSchool = isDraw ? null : win ? match.schools[0] : match.schools[1];
+  const accent = isDraw ? "#EAB308" : win ? MAGENTA : CYAN;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -88,82 +95,139 @@ export default function TwibbonScreen() {
 
     // header
     ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.font = "600 34px Rajdhani, sans-serif";
+    ctx.font = "600 34px Ooredoo, sans-serif";
     ctx.fillText(match.seriesLabel, W / 2, 170);
 
     ctx.fillStyle = "#ffffff";
     ctx.shadowColor = MAGENTA;
     ctx.shadowBlur = 34;
-    ctx.font = "900 84px Orbitron, sans-serif";
+    ctx.font = "900 84px Ooredoo, sans-serif";
     ctx.fillText("TRI LTB 1v1", W / 2, 265);
     ctx.shadowBlur = 0;
     ctx.fillStyle = CYAN;
-    ctx.font = "700 40px Rajdhani, sans-serif";
+    ctx.font = "700 40px Ooredoo, sans-serif";
     ctx.fillText("REFLEX DUEL CLASH", W / 2, 320);
 
     // result badge
     ctx.fillStyle = accent;
     ctx.shadowColor = accent;
     ctx.shadowBlur = 48;
-    ctx.font = "900 112px Orbitron, sans-serif";
-    ctx.fillText(win ? "GOAL!" : "BLOCKED!", W / 2, H - 560);
+    ctx.font = "900 112px Ooredoo, Orbitron, sans-serif";
+    ctx.fillText(isDraw ? "DRAW!" : win ? "GOAL!" : "BLOCKED!", W / 2, H - 560);
     ctx.shadowBlur = 0;
 
     // score
     ctx.fillStyle = "#ffffff";
-    ctx.font = "900 130px Orbitron, sans-serif";
+    ctx.font = "900 130px Ooredoo, sans-serif";
     ctx.shadowColor = "rgba(255,255,255,0.55)";
     ctx.shadowBlur = 26;
     ctx.fillText(`${match.taps.kicker} : ${match.taps.goalie}`, W / 2, H - 410);
     ctx.shadowBlur = 0;
 
-    // teams
-    ctx.font = "700 40px Rajdhani, sans-serif";
-    ctx.fillStyle = MAGENTA;
-    ctx.textAlign = "left";
-    ctx.fillText(match.players.kicker?.school ?? "KICKER", 110, H - 320);
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "600 34px Rajdhani, sans-serif";
-    ctx.fillText(match.players.kicker?.name?.toUpperCase() ?? "-", 110, H - 275);
-
-    ctx.textAlign = "right";
-    ctx.font = "700 40px Rajdhani, sans-serif";
-    ctx.fillStyle = CYAN;
-    ctx.fillText(match.players.goalie?.school ?? "GOALIE", W - 110, H - 320);
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "600 34px Rajdhani, sans-serif";
-    ctx.fillText(match.players.goalie?.name?.toUpperCase() ?? "-", W - 110, H - 275);
+    // Viewer Name display instead of player names
+    ctx.textAlign = "center";
+    ctx.font = "700 65px Ooredoo, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 10;
+    ctx.fillText(viewerName ? viewerName.toUpperCase() : "PENONTON LTB", W / 2, H - 280);
+    ctx.shadowBlur = 0;
 
     // winner strip
     ctx.textAlign = "center";
     ctx.fillStyle = accent;
-    ctx.font = "900 46px Orbitron, sans-serif";
+    ctx.font = "900 46px Ooredoo, sans-serif";
     ctx.shadowColor = accent;
     ctx.shadowBlur = 30;
-    ctx.fillText(
-      `WINNER · ${(winnerPlayer?.name ?? "-").toUpperCase()}`,
-      W / 2,
-      H - 180,
-    );
+    if (winnerSchool) {
+      ctx.fillText(
+        `WINNER · ${winnerSchool.toUpperCase()}`,
+        W / 2,
+        H - 180,
+      );
+    } else {
+      ctx.fillText("KEDUA TIM SEIMBANG!", W / 2, H - 180);
+    }
     ctx.shadowBlur = 0;
 
     ctx.fillStyle = "rgba(255,255,255,0.55)";
-    ctx.font = "600 32px Rajdhani, sans-serif";
+    ctx.font = "600 32px Ooredoo, sans-serif";
     ctx.fillText("#TriLTB2026  #ReflexDuelClash", W / 2, H - 120);
 
     // optional official frame on top
     if (frame) drawCover(ctx, frame);
-  }, [accent, frame, match, selfie, win, winnerPlayer]);
+  }, [accent, frame, match, selfie, win, isDraw, winnerSchool, viewerName]);
+
+  const [fontsReady, setFontsReady] = useState(false);
+
+  // Wait for custom fonts to load before drawing canvas
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    Promise.all([
+      document.fonts.load("900 84px Ooredoo"),
+    ]).then(() => setFontsReady(true))
+     .catch(() => setFontsReady(true)); // Draw anyway on error
+  }, []);
 
   useEffect(() => {
-    draw();
-  }, [draw]);
+    if (fontsReady) draw();
+  }, [draw, fontsReady]);
 
   const pick = async (file: File | undefined, kind: "selfie" | "frame") => {
     if (!file) return;
     const img = await loadImage(file);
     if (kind === "selfie") setSelfie(img);
     else setFrame(img);
+  };
+
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+      });
+      setCameraStream(stream);
+      // Attach stream to video tag after it renders
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 50);
+    } catch (err) {
+      alert("Gagal mengakses kamera. Pastikan browser Anda memiliki izin kamera.");
+    }
+  };
+
+  const closeCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
+    setCameraStream(null);
+  };
+
+  const takePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    setFlash(true);
+    setTimeout(() => setFlash(false), 300);
+
+    // Flip context horizontally if it's a front camera so the photo isn't mirrored incorrectly
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL("image/png");
+    const img = new Image();
+    img.onload = () => {
+      setSelfie(img);
+      closeCamera();
+    };
+    img.src = dataUrl;
   };
 
   const toBlob = () =>
@@ -225,9 +289,28 @@ export default function TwibbonScreen() {
           />
         </div>
 
+        <div className="flex flex-col gap-1">
+          <label className="font-tech text-[10px] tracking-[0.2em] text-white/50">NAMA DI TWIBBON:</label>
+          <input
+            value={viewerName}
+            onChange={(e) => setViewerName(e.target.value)}
+            maxLength={30}
+            placeholder="Ketik namamu di sini..."
+            className="rounded-xl border-2 bg-black/50 px-3 py-2.5 font-tech text-base font-semibold tracking-wide text-white outline-none placeholder:text-white/40 focus:border-white/50"
+            style={{ borderColor: "rgba(255,255,255,0.2)" }}
+          />
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
-          <label className="tri-glass cursor-pointer rounded-xl border-2 border-white/20 px-3 py-3 text-center font-tech text-[11px] font-bold tracking-[0.2em] text-white">
-            UPLOAD SELFIE
+          <button
+            type="button"
+            onClick={openCamera}
+            className="tri-glass cursor-pointer rounded-xl border-2 border-white/20 px-3 py-3 text-center font-tech text-[11px] font-bold tracking-[0.2em] text-white transition-transform active:scale-95"
+          >
+            BUKA KAMERA
+          </button>
+          <label className="tri-glass cursor-pointer rounded-xl border-2 border-white/20 px-3 py-3 text-center font-tech text-[11px] font-bold tracking-[0.2em] text-white transition-transform active:scale-95">
+            UPLOAD FOTO
             <input
               type="file"
               accept="image/*"
@@ -235,8 +318,10 @@ export default function TwibbonScreen() {
               onChange={(e) => void pick(e.target.files?.[0], "selfie")}
             />
           </label>
-          <label className="tri-glass cursor-pointer rounded-xl border-2 border-white/20 px-3 py-3 text-center font-tech text-[11px] font-bold tracking-[0.2em] text-white">
-            UPLOAD FRAME
+        </div>
+        <div className="mt-1 grid grid-cols-1">
+          <label className="tri-glass cursor-pointer rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-center font-tech text-[10px] font-bold tracking-[0.2em] text-white/70 transition-colors hover:text-white">
+            + UPLOAD FRAME (OPSIONAL)
             <input
               type="file"
               accept="image/png"
@@ -245,9 +330,7 @@ export default function TwibbonScreen() {
             />
           </label>
         </div>
-        <p className="text-center font-tech text-[10px] tracking-[0.2em] text-white/35">
-          FRAME RESMI (PNG TRANSPARAN 1080×1920) OPSIONAL
-        </p>
+
 
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -278,6 +361,34 @@ export default function TwibbonScreen() {
           KEMBALI KE LOBBY
         </Link>
       </div>
+
+      {cameraStream && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center bg-black">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="h-full w-full object-cover"
+            style={{ transform: "scaleX(-1)" }} // Mirror the preview
+          />
+          <div className={`pointer-events-none absolute inset-0 z-[101] bg-white transition-opacity duration-300 ${flash ? "opacity-100" : "opacity-0"}`} />
+          <div className="absolute inset-x-0 bottom-12 flex flex-col items-center gap-6 z-[102]">
+            <button
+              onClick={takePhoto}
+              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-white/30 backdrop-blur-md transition-transform active:scale-90"
+              aria-label="Ambil Foto"
+            >
+              <div className="h-16 w-16 rounded-full bg-white shadow-[0_0_20px_rgba(255,255,255,0.8)]" />
+            </button>
+            <button
+              onClick={closeCamera}
+              className="rounded-full bg-black/60 px-6 py-2 font-tech text-xs font-bold tracking-[0.2em] text-white backdrop-blur-md transition-colors hover:bg-white/20"
+            >
+              BATAL
+            </button>
+          </div>
+        </div>
+      )}
     </DuelFrame>
   );
 }
