@@ -2,14 +2,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import DuelFrame from "@/components/duel/DuelFrame";
 import { matchActions, useMatch } from "@/lib/matchStore";
+import { schoolLogoUrl } from "@/lib/schoolLogos";
 
 const MAGENTA = "#FF0066";
 const CYAN = "#00E5FF";
 const W = 1080;
 const H = 1920;
 
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    // Trust boundary: this is a user-chosen file about to be drawn onto a canvas
+    // we then export. Reject anything that is not an image, or big enough to
+    // wedge a phone browser, before it reaches decode.
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("File harus berupa gambar"));
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      reject(new Error("Ukuran gambar maksimal 12 MB"));
+      return;
+    }
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
@@ -22,6 +36,54 @@ function loadImage(file: File): Promise<HTMLImageElement> {
     };
     img.src = url;
   });
+}
+
+// Logos are same-origin (express serves /public), so the canvas stays untainted
+// and toBlob keeps working. A missing file resolves to null rather than
+// rejecting: a twibbon without a logo is still a valid twibbon.
+function loadLogo(url: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+// Draws an image scaled to fit inside a square box, centred, preserving aspect.
+function drawLogoBadge(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  cx: number,
+  cy: number,
+  size: number,
+  ring: string,
+) {
+  const r = size / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fill();
+  ctx.clip();
+  const pad = size * 0.12;
+  const inner = size - pad * 2;
+  const scale = Math.min(inner / img.width, inner / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = ring;
+  ctx.shadowColor = ring;
+  ctx.shadowBlur = 24;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
@@ -43,7 +105,16 @@ export default function TwibbonScreen() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [flash, setFlash] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // MV-1: the twibbon showed school NAMES only. The logos already ship in
+  // /public/school-logo but nothing ever drew them.
+  const [logos, setLogos] = useState<{ a: HTMLImageElement | null; b: HTMLImageElement | null }>({
+    a: null,
+    b: null,
+  });
 
+  const schoolA = match.schools[0] ?? null;
+  const schoolB = match.schools[1] ?? null;
   const isDraw = match.winner === "draw";
   const win = match.winner === "kicker";
   const winnerSchool = isDraw ? null : win ? match.schools[0] : match.schools[1];
@@ -124,6 +195,26 @@ export default function TwibbonScreen() {
     ctx.fillText(`${match.taps.kicker} : ${match.taps.goalie}`, W / 2, H - 410);
     ctx.shadowBlur = 0;
 
+    // MV-1: school crests flanking the score. Drawn after the score so the
+    // badge ring sits above the scrim, and skipped cleanly when a school has no
+    // logo file rather than leaving a blank ring.
+    const badgeY = H - 455;
+    const badgeSize = 168;
+    if (logos.a) drawLogoBadge(ctx, logos.a, 190, badgeY, badgeSize, MAGENTA);
+    if (logos.b) drawLogoBadge(ctx, logos.b, W - 190, badgeY, badgeSize, CYAN);
+
+    ctx.textAlign = "center";
+    ctx.font = "700 30px Ooredoo, sans-serif";
+    ctx.shadowBlur = 0;
+    if (schoolA) {
+      ctx.fillStyle = MAGENTA;
+      ctx.fillText(schoolA.toUpperCase(), 190, badgeY + badgeSize / 2 + 46);
+    }
+    if (schoolB) {
+      ctx.fillStyle = CYAN;
+      ctx.fillText(schoolB.toUpperCase(), W - 190, badgeY + badgeSize / 2 + 46);
+    }
+
     // Viewer Name display instead of player names
     ctx.textAlign = "center";
     ctx.font = "700 65px Ooredoo, sans-serif";
@@ -156,7 +247,19 @@ export default function TwibbonScreen() {
 
     // optional official frame on top
     if (frame) drawCover(ctx, frame);
-  }, [accent, frame, match, selfie, win, isDraw, winnerSchool, viewerName]);
+  }, [accent, frame, match, selfie, win, isDraw, winnerSchool, viewerName, logos, schoolA, schoolB]);
+
+  useEffect(() => {
+    let alive = true;
+    const urlA = schoolLogoUrl(schoolA);
+    const urlB = schoolLogoUrl(schoolB);
+    Promise.all([urlA ? loadLogo(urlA) : null, urlB ? loadLogo(urlB) : null]).then(([a, b]) => {
+      if (alive) setLogos({ a, b });
+    });
+    return () => {
+      alive = false; // a late resolve must not setState on an unmounted screen
+    };
+  }, [schoolA, schoolB]);
 
   const [fontsReady, setFontsReady] = useState(false);
 
@@ -175,16 +278,38 @@ export default function TwibbonScreen() {
 
   const pick = async (file: File | undefined, kind: "selfie" | "frame") => {
     if (!file) return;
-    const img = await loadImage(file);
-    if (kind === "selfie") setSelfie(img);
-    else setFrame(img);
+    setError(null);
+    try {
+      const img = await loadImage(file);
+      if (kind === "selfie") setSelfie(img);
+      else setFrame(img);
+    } catch (err) {
+      // Previously this rejection escaped into a void promise and the UI just
+      // did nothing, which reads as "the button is broken".
+      setError(err instanceof Error ? err.message : "Gagal memuat gambar");
+    }
   };
+
+  // The stream is held in state, so leaving the screen with the camera open used
+  // to keep the device light on until the tab was closed. A ref mirrors it so
+  // the unmount cleanup does not need the stream in its dependency list.
+  const streamRef = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    streamRef.current = cameraStream;
+  }, [cameraStream]);
+  useEffect(
+    () => () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    },
+    [],
+  );
 
   const openCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user" },
       });
+      setError(null);
       setCameraStream(stream);
       // Attach stream to video tag after it renders
       setTimeout(() => {
@@ -192,8 +317,8 @@ export default function TwibbonScreen() {
           videoRef.current.srcObject = stream;
         }
       }, 50);
-    } catch (err) {
-      alert("Gagal mengakses kamera. Pastikan browser Anda memiliki izin kamera.");
+    } catch {
+      setError("Gagal mengakses kamera. Pastikan izin kamera diberikan.");
     }
   };
 
@@ -207,6 +332,12 @@ export default function TwibbonScreen() {
   const takePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
+    // Tapping the shutter before the first frame decodes gives videoWidth 0,
+    // which yields a 0x0 canvas and a silently blank selfie.
+    if (!video.videoWidth || !video.videoHeight) {
+      setError("Kamera belum siap, tunggu sebentar.");
+      return;
+    }
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -231,28 +362,53 @@ export default function TwibbonScreen() {
   };
 
   const toBlob = () =>
-    new Promise<Blob | null>((resolve) =>
-      canvasRef.current?.toBlob((b) => resolve(b), "image/png", 0.95),
-    );
+    new Promise<Blob | null>((resolve) => {
+      const canvas = canvasRef.current;
+      // Optional chaining used to swallow the null case: the promise never
+      // settled and `busy` stayed true, disabling both buttons for good.
+      if (!canvas) {
+        resolve(null);
+        return;
+      }
+      canvas.toBlob((b) => resolve(b), "image/png", 0.95);
+    });
 
   const download = async () => {
     setBusy(true);
-    const blob = await toBlob();
-    setBusy(false);
-    if (!blob) return;
+    setError(null);
+    let blob: Blob | null = null;
+    try {
+      blob = await toBlob();
+    } finally {
+      setBusy(false); // must clear even if toBlob throws, or the UI locks up
+    }
+    if (!blob) {
+      setError("Gagal membuat gambar. Coba lagi.");
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `tri-ltb-twibbon-${Date.now()}.png`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking in the same tick cancels the download in Safari and some
+    // Android webviews. Give the navigation a turn of the event loop first.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   const share = async () => {
     setBusy(true);
-    const blob = await toBlob();
-    setBusy(false);
-    if (!blob) return;
+    setError(null);
+    let blob: Blob | null = null;
+    try {
+      blob = await toBlob();
+    } finally {
+      setBusy(false);
+    }
+    if (!blob) {
+      setError("Gagal membuat gambar. Coba lagi.");
+      return;
+    }
     const file = new File([blob], "tri-ltb-twibbon.png", { type: "image/png" });
     if (navigator.canShare?.({ files: [file] })) {
       try {
@@ -288,6 +444,15 @@ export default function TwibbonScreen() {
             aria-label="Pratinjau twibbon"
           />
         </div>
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg border border-tri-magenta/60 bg-tri-magenta/10 px-3 py-2 text-center font-tech text-[11px] tracking-wide text-tri-magenta"
+          >
+            {error}
+          </p>
+        )}
 
         <div className="flex flex-col gap-1">
           <label className="font-tech text-[10px] tracking-[0.2em] text-white/50">NAMA DI TWIBBON:</label>

@@ -2,18 +2,11 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { matchActions, useMatch } from "@/lib/matchStore";
 import { SCHOOL_LIST } from "@/lib/schoolsData";
+import { schoolLogoUrlById } from "@/lib/schoolLogos";
 
 const MAGENTA = "#FF0066";
 const CYAN = "#00E5FF";
 const DISMISSED_CODE_KEY = "ltb.dismissedCode";
-
-/** Maps school IDs to known logo filenames in /school-logo/ */
-const SCHOOL_LOGO_MAP: Record<string, string> = {
-  "SMA-1": "/school-logo/MAN 2 Yogyakarta.png",
-  "SMA-2": "/school-logo/SMAN 1 Sayegan.jpg",
-  "SMA-3": "/school-logo/SMAN 4 Yogyakarta.png",
-  "SMA-4": "/school-logo/SMK Negeri 2 Klaten.png",
-};
 
 function SchoolInitials({ name, color }: { name: string; color: string }) {
   const initials = name
@@ -398,7 +391,7 @@ export default function AdminScreen() {
                       ? "KICKER"
                       : "GOALIE"
                     : "";
-                  const logoSrc = SCHOOL_LOGO_MAP[school.id];
+                  const logoSrc = schoolLogoUrlById(school.id);
 
                   return (
                     <button
