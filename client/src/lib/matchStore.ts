@@ -10,46 +10,52 @@ export interface PlayerInfo {
   school: string;
 }
 
-export interface MatchState {
+export type MatchState = {
+  isConnected: boolean;
+  status: MatchStatus;
   schools: string[];
   seriesLabel: string;
-  durationSec: number;
-  status: MatchStatus;
-  playerCounts: { kicker: number; goalie: number };
-  taps: { kicker: number; goalie: number };
-  chargingEndsAt: number | null;
-  endsAt: number | null;
-  winner: DuelSide | "draw" | null;
-  /** Which side the local player chose (for team-locked tapping) */
-  playerSide: DuelSide | null;
-  isConnected: boolean;
   matchId: string | null;
-  leaderboard: Array<{
-    school: string;
-    points: number;
-    wins: number;
-    losses: number;
-    draws: number;
-    taps: number;
-  }>;
-}
+  activeMatchCode: string | null; // 6-digit code for active match
+  taps: { kicker: number; goalie: number };
+  playerCounts: { kicker: number; goalie: number };
+  winner: DuelSide | "draw" | null;
+  endsAt: number | null; // For countdown timers
+  chargingEndsAt: number | null;
+  durationSec: number;
+  playerSide: DuelSide | null; // which side this client is playing
+  leaderboard: Array<{ school: string, points: number, wins: number, losses: number, draws: number, taps: number }>;
+  isAdmin: boolean; // server-confirmed: this socket may emit ADMIN_* events
+  
+  scheduledMatches: Array<{ id: string, schoolA: string, schoolB: string, seriesCity: string, scheduledTime: string, status: string }>;
+  completedMatches: Array<{ id: string, schoolA: string, schoolB: string, seriesCity: string, finalScoreA: number, finalScoreB: number, winnerSchool: string, timestamp: number }>;
+};
 
 export const CHARGING_MS = 3200;
 
+// B-1: mirrors CLIENT_BATCH_RATE_MS in config/gameSettings.js. Taps accumulate
+// locally and ship as one counted event per window instead of one event per tap.
+const TAP_BATCH_MS = 100;
+const ADMIN_TOKEN_KEY = "ltb.adminToken";
+
 const DEFAULT_STATE: MatchState = {
   schools: [],
-  seriesLabel: "SERI SURABAYA · MATCH DAY 1",
-  durationSec: 60,
-  status: "lobby",
-  playerCounts: { kicker: 0, goalie: 0 },
+  seriesLabel: "LIGA TENDANG BOLA",
+  matchId: null,
+  activeMatchCode: null,
   taps: { kicker: 0, goalie: 0 },
-  chargingEndsAt: null,
-  endsAt: null,
+  playerCounts: { kicker: 0, goalie: 0 },
+  status: "lobby",
   winner: null,
+  endsAt: null,
+  chargingEndsAt: null,
+  durationSec: 10,
   playerSide: null,
   isConnected: false,
-  matchId: null,
   leaderboard: [],
+  isAdmin: false,
+  scheduledMatches: [],
+  completedMatches: [],
 };
 
 export const playerSchema = z.object({
@@ -77,14 +83,72 @@ function set(patch: Partial<MatchState>) {
 let socketInitialized = false;
 let socket: any = null;
 
+function readAdminToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    // ?adminToken=... lets an operator bookmark an authenticated admin URL once.
+    const fromUrl = new URLSearchParams(window.location.search).get("adminToken");
+    if (fromUrl) {
+      window.localStorage.setItem(ADMIN_TOKEN_KEY, fromUrl);
+      return fromUrl;
+    }
+    return window.localStorage.getItem(ADMIN_TOKEN_KEY);
+  } catch {
+    return null; // private mode / storage disabled
+  }
+}
+
+// --- B-1: client-side tap batching ---
+let tapBuffer: Record<DuelSide, number> = { kicker: 0, goalie: 0 };
+let tapFlushTimer: ReturnType<typeof setInterval> | null = null;
+
+function flushTapBuffer() {
+  const matchId = state.matchId;
+  for (const side of ["kicker", "goalie"] as DuelSide[]) {
+    const count = tapBuffer[side];
+    if (count <= 0) continue;
+    tapBuffer[side] = 0;
+    socket?.emit("TAP_BATCH", {
+      matchId,
+      team: side === "kicker" ? "A" : "B",
+      count,
+    });
+  }
+}
+
+function startTapFlush() {
+  if (tapFlushTimer) return;
+  tapFlushTimer = setInterval(flushTapBuffer, TAP_BATCH_MS);
+}
+
+function stopTapFlush() {
+  if (!tapFlushTimer) return;
+  clearInterval(tapFlushTimer);
+  tapFlushTimer = null;
+  flushTapBuffer(); // ship whatever is left before going idle
+}
+
 function initSocket() {
   if (socketInitialized || typeof window === "undefined") return;
   socketInitialized = true;
   
-  socket = io();
+  const adminToken = readAdminToken();
+  socket = io(adminToken ? { auth: { adminToken } } : undefined);
 
   socket.on('connect', () => set({ isConnected: true }));
-  socket.on('disconnect', () => set({ isConnected: false }));
+  socket.on('disconnect', () => {
+    set({ isConnected: false });
+    stopTapFlush();
+  });
+
+  socket.on('AUTH_STATE', (data: { isAdmin: boolean }) => {
+    set({ isAdmin: Boolean(data?.isAdmin) });
+  });
+
+  socket.on('ADMIN_UNAUTHORIZED', (data: { event: string }) => {
+    console.warn('Admin action rejected by server:', data?.event);
+    set({ isAdmin: false });
+  });
 
   socket.on('STATE_UPDATE', (data: any) => {
     // Map backend states to frontend MatchStatus
@@ -95,12 +159,24 @@ function initSocket() {
     if (data.state === 'STATE_OUTCOME_ANIMATION') nextStatus = 'finished';
     if (data.state === 'STATE_LEADERBOARD') nextStatus = 'leaderboard';
 
+    const isSetup = data.state === 'STATE_ADMIN_SETUP';
+
     set({ 
       status: nextStatus,
-      schools: data.match && data.match.schoolA ? [data.match.schoolA, data.match.schoolB] : state.schools,
+      schools: isSetup ? [] : (data.match && data.match.schoolA ? [data.match.schoolA, data.match.schoolB] : state.schools),
       seriesLabel: data.match && data.match.seriesCity ? data.match.seriesCity : state.seriesLabel,
       playerCounts: data.playerCounts || state.playerCounts,
-      matchId: data.match && data.match.id ? data.match.id : state.matchId
+      matchId: isSetup ? null : (data.match && data.match.id ? data.match.id : state.matchId),
+      activeMatchCode: data.activeMatchCode || null,
+      // If the match was reset by the admin, force the player to clear their side and rejoin
+      playerSide: isSetup ? null : state.playerSide
+    });
+  });
+
+  socket.on('MATCH_LISTS_UPDATE', (data: any) => {
+    set({
+      scheduledMatches: data.scheduledMatches || [],
+      completedMatches: data.completedMatches || [],
     });
   });
 
@@ -123,6 +199,7 @@ function initSocket() {
   });
 
   socket.on('START_BATTLE', (data: any) => {
+    tapBuffer = { kicker: 0, goalie: 0 };
     const durationMs = data?.durationMs ?? state.durationSec * 1000;
     set({
       status: "live",
@@ -139,6 +216,7 @@ function initSocket() {
   });
 
   socket.on('MATCH_END', (data: any) => {
+    stopTapFlush();
     let winner: DuelSide | "draw" | null = null;
     if (data.winner === 'A') winner = 'kicker';
     else if (data.winner === 'B') winner = 'goalie';
@@ -185,14 +263,19 @@ export const matchActions = {
     set({ playerSide: null });
   },
   setupMatch(schoolA: string, schoolB: string, seriesCity: string) {
-    set({ schools: [schoolA, schoolB], seriesLabel: seriesCity });
-    if (socket) {
-      socket.emit('ADMIN_SET_MATCH', {
-        schoolA,
-        schoolB,
-        seriesCity,
-      });
-    }
+    if (socket) socket.emit('ADMIN_SET_MATCH', { schoolA, schoolB, seriesCity });
+  },
+  scheduleMatch(schoolA: string, schoolB: string, seriesCity: string, scheduledTime: string) {
+    if (socket) socket.emit('ADMIN_SCHEDULE_MATCH', { schoolA, schoolB, seriesCity, scheduledTime });
+  },
+  startScheduled(id: string) {
+    if (socket) socket.emit('ADMIN_START_SCHEDULED', { id });
+  },
+  validateCode(code: string): Promise<{ success: boolean; match?: any; message?: string }> {
+    return new Promise((resolve) => {
+      if (!socket) return resolve({ success: false, message: 'Tidak terhubung ke server' });
+      socket.emit('USER_VALIDATE_CODE', { code }, (response: any) => resolve(response));
+    });
   },
   startCharging() {
     if (socket) {
@@ -207,14 +290,13 @@ export const matchActions = {
     if (state.status !== "live") return;
     // Only allow tapping for the player's chosen side
     if (state.playerSide && side !== state.playerSide) return;
-    
+
     // Optimistic UI update
     set({ taps: { ...state.taps, [side]: state.taps[side] + 1 } });
-    
-    // Emit to server
-    if (socket) {
-      socket.emit('TAP', { matchId: state.matchId, team: side === 'kicker' ? 'A' : 'B' });
-    }
+
+    // B-1: buffer locally; the flush timer emits one counted event per window.
+    tapBuffer[side] += 1;
+    startTapFlush();
   },
   finish() {
     // Safety fallback: force client to 'finished' if server MATCH_END was missed.
@@ -237,12 +319,18 @@ export const matchActions = {
   },
   resetMatch() {
     if (socket) socket.emit('ADMIN_RESET');
-    set({
-      ...DEFAULT_STATE,
-    });
+    stopTapFlush();
+    set({ ...DEFAULT_STATE, isConnected: state.isConnected, isAdmin: state.isAdmin });
   },
   resetAll() {
-    set({ ...DEFAULT_STATE, schools: state.schools, seriesLabel: state.seriesLabel });
+    stopTapFlush();
+    set({
+      ...DEFAULT_STATE,
+      schools: state.schools,
+      seriesLabel: state.seriesLabel,
+      isConnected: state.isConnected,
+      isAdmin: state.isAdmin,
+    });
   },
 };
 

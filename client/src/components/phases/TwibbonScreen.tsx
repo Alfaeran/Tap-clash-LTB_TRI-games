@@ -355,7 +355,7 @@ export default function TwibbonScreen() {
 
         <Link
           to="/"
-          onClick={() => matchActions.resetMatch()}
+          onClick={() => matchActions.resetAll()}
           className="mt-auto rounded-xl border border-white/25 py-3 text-center font-tech text-[11px] font-bold tracking-[0.3em] text-white/70"
         >
           KEMBALI KE LOBBY
