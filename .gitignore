@@ -4,3 +4,13 @@ node_modules/
 dist/
 client/node_modules/
 client/dist/
+
+# Nitro/Vinxi build output (client/.gitignore covers these for its own subtree)
+.output/
+.nitro/
+.tanstack/
+.vinxi/
+.wrangler/
+
+# Crash artifacts from Git-Bash on Windows; never source.
+*.stackdump
