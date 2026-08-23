@@ -299,6 +299,16 @@ io.on('connection', (socket) => {
     publishMatchLists();
   });
 
+  // MV-3: an operator who mis-schedules a match had no way to remove it; the
+  // stale row sat in the list all event with a live START button under it.
+  onAdmin('ADMIN_DELETE_SCHEDULED', (payload) => {
+    if (!payload || !payload.id) return;
+    const before = scheduledMatches.length;
+    scheduledMatches = scheduledMatches.filter(m => m.id !== payload.id);
+    if (scheduledMatches.length === before) return; // already gone
+    publishMatchLists();
+  });
+
   onAdmin('ADMIN_START_SCHEDULED', async (payload) => {
     // B-2: a new match must not inherit the previous match's pending transitions.
     clearPhaseTimers();

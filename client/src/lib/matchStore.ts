@@ -271,6 +271,9 @@ export const matchActions = {
   startScheduled(id: string) {
     if (socket) socket.emit('ADMIN_START_SCHEDULED', { id });
   },
+  deleteScheduled(id: string) {
+    if (socket) socket.emit('ADMIN_DELETE_SCHEDULED', { id });
+  },
   validateCode(code: string): Promise<{ success: boolean; match?: any; message?: string }> {
     return new Promise((resolve) => {
       if (!socket) return resolve({ success: false, message: 'Tidak terhubung ke server' });

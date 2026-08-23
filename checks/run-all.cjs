@@ -8,6 +8,7 @@ const CHECKS = [
   ['B-1 tap flow (end to end)',     path.join(__dirname, '..', 'tapflow-check.cjs')],
   ['B-2/B-3/B-4 lifecycle',         path.join(__dirname, 'lifecycle-check.cjs')],
   ['B-5/B-7 persistence',           path.join(__dirname, 'persistence-check.cjs')],
+  ['MV-3 delete schedule',          path.join(__dirname, 'admin-delete-check.cjs')],
 ];
 
 let failed = 0;

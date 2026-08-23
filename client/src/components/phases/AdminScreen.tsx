@@ -5,6 +5,7 @@ import { SCHOOL_LIST } from "@/lib/schoolsData";
 
 const MAGENTA = "#FF0066";
 const CYAN = "#00E5FF";
+const DISMISSED_CODE_KEY = "ltb.dismissedCode";
 
 /** Maps school IDs to known logo filenames in /school-logo/ */
 const SCHOOL_LOGO_MAP: Record<string, string> = {
@@ -43,8 +44,30 @@ export default function AdminScreen() {
   const [category, setCategory] = useState<"SMA" | "SMP">("SMA");
   const [selectedSchools, setSelectedSchools] = useState<string[]>([]);
   
-  // Local state to show the modal when a match is started
-  const [showCodeModal, setShowCodeModal] = useState(false);
+  // MV-3: the code modal used to live in local state, so an admin refresh during
+  // a live match lost the access code with no way to read it back. Visibility is
+  // derived from the server's activeMatchCode instead; only the operator's
+  // "dismiss" decision is local, and it is remembered per code so a refresh does
+  // not resurrect a modal they already closed.
+  const [dismissedCode, setDismissedCode] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.sessionStorage.getItem(DISMISSED_CODE_KEY);
+    } catch {
+      return null; // private mode / storage disabled
+    }
+  });
+
+  const dismissCode = (code: string) => {
+    setDismissedCode(code);
+    try {
+      window.sessionStorage.setItem(DISMISSED_CODE_KEY, code);
+    } catch {
+      /* non-fatal: the modal just reappears on the next refresh */
+    }
+  };
+
+  const showCodeModal = Boolean(match.activeMatchCode) && match.activeMatchCode !== dismissedCode;
 
   const handleSchoolClick = (schoolId: string) => {
     if (selectedSchools.includes(schoolId)) {
@@ -74,7 +97,18 @@ export default function AdminScreen() {
 
   const handleStartMatch = (id: string) => {
     matchActions.startScheduled(id);
-    setShowCodeModal(true);
+    // Clear any earlier dismissal so the new match's code is shown.
+    setDismissedCode(null);
+    try {
+      window.sessionStorage.removeItem(DISMISSED_CODE_KEY);
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  const handleDeleteMatch = (id: string, label: string) => {
+    if (!window.confirm(`Hapus jadwal ${label}?`)) return;
+    matchActions.deleteScheduled(id);
   };
 
   const twoSelected = selectedSchools.length === 2;
@@ -103,7 +137,7 @@ export default function AdminScreen() {
     );
   }
 
-  // If a match was started and we have the code, show the giant modal
+  // If a match is live and the code has not been dismissed, show the giant modal
   if (showCodeModal && match.activeMatchCode) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#050510] p-4 font-sans selection:bg-tri-magenta/30">
@@ -121,14 +155,20 @@ export default function AdminScreen() {
             </p>
           </div>
           
-          <div className="mt-8 w-full">
+          <div className="mt-8 flex w-full flex-col gap-3">
             <Link
               to="/admin-live"
-              onClick={() => setShowCodeModal(false)}
               className="block w-full rounded-xl bg-tri-magenta py-4 text-center font-display text-sm font-black tracking-[0.2em] text-white shadow-[0_0_20px_rgba(255,0,102,0.4)] transition-transform hover:scale-[1.02] active:scale-95"
             >
               MASUK KE LIVE CONTROL
             </Link>
+            <button
+              type="button"
+              onClick={() => dismissCode(match.activeMatchCode!)}
+              className="w-full rounded-xl border border-white/25 py-3 font-tech text-[11px] font-bold tracking-[0.3em] text-white/60 transition-colors hover:text-white"
+            >
+              TUTUP & KEMBALI KE JADWAL
+            </button>
           </div>
         </div>
       </div>
@@ -178,18 +218,85 @@ export default function AdminScreen() {
                     <span className="font-tech text-[10px] text-white/30 font-bold">VS</span>
                     <p className="font-display text-sm font-bold text-tri-cyan truncate w-[45%] text-left">{sm.schoolB}</p>
                   </div>
-                  <button
-                    onClick={() => handleStartMatch(sm.id)}
-                    className="w-full rounded-lg bg-tri-cyan/20 border border-tri-cyan py-2 font-display text-[11px] font-black tracking-widest text-tri-cyan transition-all active:scale-95 hover:bg-tri-cyan hover:text-black"
-                    style={{ boxShadow: `0 0 15px ${CYAN}33` }}
-                  >
-                    START MATCH
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleStartMatch(sm.id)}
+                      className="flex-1 rounded-lg bg-tri-cyan/20 border border-tri-cyan py-2 font-display text-[11px] font-black tracking-widest text-tri-cyan transition-all active:scale-95 hover:bg-tri-cyan hover:text-black"
+                      style={{ boxShadow: `0 0 15px ${CYAN}33` }}
+                    >
+                      START MATCH
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMatch(sm.id, `${sm.schoolA} vs ${sm.schoolB}`)}
+                      aria-label={`Hapus jadwal ${sm.schoolA} vs ${sm.schoolB}`}
+                      title="Hapus jadwal"
+                      className="rounded-lg border border-white/20 px-3 py-2 font-display text-[11px] font-black tracking-widest text-white/40 transition-all active:scale-95 hover:border-tri-magenta hover:text-tri-magenta"
+                    >
+                      HAPUS
+                    </button>
+                  </div>
                 </div>
               ))
             )}
           </div>
         </section>
+
+        {/* MV-3: completedMatches came over the wire but was never rendered, so an
+            operator had no way to read back a finished result. */}
+        {match.completedMatches.length > 0 && (
+          <section className="tri-glass rounded-2xl border border-white/15 p-4">
+            <h2 className="mb-4 font-display text-sm font-black tracking-[0.25em] text-white/80">
+              RIWAYAT PERTANDINGAN
+            </h2>
+            <div className="custom-scrollbar flex max-h-[320px] flex-col gap-3 overflow-y-auto pr-1">
+              {[...match.completedMatches]
+                .sort((a, b) => b.timestamp - a.timestamp)
+                .map((cm) => {
+                  const aWon = cm.winnerSchool === cm.schoolA;
+                  const bWon = cm.winnerSchool === cm.schoolB;
+                  return (
+                    <div key={cm.id} className="rounded-xl border border-white/10 bg-black/50 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="font-tech text-[10px] tracking-[0.2em] text-white/50">
+                          {cm.seriesCity}
+                        </span>
+                        <span className="font-tech text-[10px] text-white/40">
+                          {new Date(cm.timestamp).toLocaleString("id-ID", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p
+                          className={`w-[38%] truncate text-right font-display text-xs font-bold ${aWon ? "text-tri-magenta" : "text-white/45"}`}
+                        >
+                          {cm.schoolA}
+                        </p>
+                        <p className="font-display text-sm font-black tabular-nums text-white">
+                          {cm.finalScoreA}
+                          <span className="px-1 text-white/30">-</span>
+                          {cm.finalScoreB}
+                        </p>
+                        <p
+                          className={`w-[38%] truncate font-display text-xs font-bold ${bWon ? "text-tri-cyan" : "text-white/45"}`}
+                        >
+                          {cm.schoolB}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-center font-tech text-[9px] tracking-[0.25em] text-white/40">
+                        {cm.winnerSchool && cm.winnerSchool !== "DRAW"
+                          ? `PEMENANG: ${cm.winnerSchool}`
+                          : "SERI"}
+                      </p>
+                    </div>
+                  );
+                })}
+            </div>
+          </section>
+        )}
 
         {/* Scheduling Form */}
         <section className="tri-glass rounded-2xl border border-white/15 p-4">
