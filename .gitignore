@@ -14,3 +14,7 @@ client/dist/
 
 # Crash artifacts from Git-Bash on Windows; never source.
 *.stackdump
+
+# Separate repo (github.com/Alfaeran/reflex-clash-studio); was a broken gitlink
+# with no .gitmodules, so a fresh clone got an empty directory.
+reflex-clash-studio/
