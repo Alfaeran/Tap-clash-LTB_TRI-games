@@ -15,6 +15,13 @@ const LOGO_FILE_BY_ID: Record<string, string> = {
   "SMA-2": "SMAN 1 Sayegan.jpg",
   "SMA-3": "SMAN 4 Yogyakarta.png",
   "SMA-4": "SMK Negeri 2 Klaten.png",
+  "SMA-7": "SMAN 8 Yogyakarta.png",
+  "SMA-8": "SMAN 10 Yogyakarta.png",
+  "SMA-10": "SMAN 7 Yogyakarta.png",
+  "SMA-15": "SMAN 1 Godean.jpg",
+  "SMA-17": "SMAN 6 Yogyakarta.png",
+  "SMA-19": "SMAN 1 Wates.png",
+  "SMA-22": "SMKN 3 Yogyakarta.jpg",
 };
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
