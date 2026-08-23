@@ -68,8 +68,8 @@ function createRedisStub() {
     const cmd = (args[0] || '').toUpperCase();
     log.push(cmd);
     switch (cmd) {
-      case 'INCRBY': { const v = (store.get(args[1]) || 0) + parseInt(args[2], 10); store.set(args[1], v); return `:${v}\r\n`; }
-      case 'INCR':   { const v = (store.get(args[1]) || 0) + 1; store.set(args[1], v); return `:${v}\r\n`; }
+      case 'INCRBY': { const v = Number(store.get(args[1]) || 0) + parseInt(args[2], 10); store.set(args[1], v); return `:${v}\r\n`; }
+      case 'INCR':   { const v = Number(store.get(args[1]) || 0) + 1; store.set(args[1], v); return `:${v}\r\n`; }
       case 'SET':    store.set(args[1], args[2]); return '+OK\r\n';
       case 'GET':    return bulk(store.has(args[1]) ? store.get(args[1]) : null);
       case 'DEL':    { let n = 0; for (const k of args.slice(1)) { if (store.delete(k)) n++; if (hashes.delete(k)) n++; if (zsets.delete(k)) n++; } return `:${n}\r\n`; }

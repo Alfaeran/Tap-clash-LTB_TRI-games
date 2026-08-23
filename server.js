@@ -233,6 +233,11 @@ io.on('connection', (socket) => {
     completedMatches
   });
 
+  // The standings were only ever pushed once, at the OUTCOME->LEADERBOARD hop.
+  // A client that connects later (refresh, deep link, the KLASEMEN button) never
+  // saw that emit and rendered an empty board.
+  fetchLeaderboard().then((leaderboard) => socket.emit('LEADERBOARD_DATA', { leaderboard }));
+
   // ==============================
   // USER EVENTS
   // ==============================

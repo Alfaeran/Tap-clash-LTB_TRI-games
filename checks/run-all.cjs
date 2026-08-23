@@ -10,6 +10,7 @@ const CHECKS = [
   ['B-5/B-7 persistence',           path.join(__dirname, 'persistence-check.cjs')],
   ['MV-3 delete schedule',          path.join(__dirname, 'admin-delete-check.cjs')],
   ['MV-1 school logos',             path.join(__dirname, 'school-logo-check.cjs')],
+  ['Leaderboard on connect',        path.join(__dirname, 'leaderboard-connect-check.cjs')],
 ];
 
 let failed = 0;
