@@ -31,6 +31,8 @@ const LOGO_FILE_BY_ID: Record<string, string> = {
   "SMA-23": "SMK Penerbangan AAG.jpg",
   "SMP-1": "SMPN 7 Yogyakarta.png",
   "SMP-3": "SMP IT Alam Nurul Islam.png",
+  "SMA-21": "SMK SMTI Yogyakarta.png",
+  "SMP-5": "SMP Joannes Bosco.png",
 };
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
