@@ -71,6 +71,13 @@ let currentMatch = {
 };
 let activeMatchCode = null; // The 6-digit code for the live match
 
+// MATCH_END was emitted once and never replayed, so a client that connected
+// afterwards (a refresh on the result or twibbon screen) had winner === null.
+// The twibbon then fell through its `win ? A : B` ternary and printed school B
+// as the winner on a shareable image. Keep the last outcome so late joiners get
+// the real one; cleared whenever a new match is set up.
+let lastMatchResult = null;
+
 let scheduledMatches = []; 
 // array of { id, schoolA, schoolB, seriesCity, scheduledTime, status: 'scheduled' }
 
@@ -237,6 +244,12 @@ io.on('connection', (socket) => {
   // A client that connects later (refresh, deep link, the KLASEMEN button) never
   // saw that emit and rendered an empty board.
   fetchLeaderboard().then((leaderboard) => socket.emit('LEADERBOARD_DATA', { leaderboard }));
+
+  // Replay the finished match so a reconnecting client renders the real score
+  // and winner instead of defaulting to 0:0 with school B crowned.
+  if (lastMatchResult && (currentGameState === STATES.OUTCOME || currentGameState === STATES.LEADERBOARD)) {
+    socket.emit('MATCH_END', lastMatchResult);
+  }
 
   // ==============================
   // USER EVENTS
@@ -563,6 +576,7 @@ async function endBattle() {
   });
   publishMatchLists();
 
+  lastMatchResult = matchResult;
   io.emit('MATCH_END', matchResult);
   io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch, activeMatchCode });
 
