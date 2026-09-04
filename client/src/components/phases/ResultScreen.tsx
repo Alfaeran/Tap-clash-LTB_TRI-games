@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import anime from "animejs";
 import { ParticleField, ShieldIcon, BoltIcon, Shockwaves } from "@/components/duel/effects";
 import DuelFrame from "@/components/duel/DuelFrame";
-import { useMatch } from "@/lib/matchStore";
+import { matchActions, useMatch } from "@/lib/matchStore";
 
 const MAGENTA = "#FF0066";
 const CYAN = "#00E5FF";
@@ -77,6 +77,14 @@ export default function ResultScreen() {
   return (
     <DuelFrame>
       <div className="absolute inset-0 z-50 grid place-items-center px-6">
+        <div className="absolute top-4 left-4 z-50">
+          <button
+            onClick={() => matchActions.leave()}
+            className="rounded-full border border-white/20 bg-black/40 px-4 py-2 font-display text-[10px] font-black tracking-widest text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95"
+          >
+            KELUAR
+          </button>
+        </div>
         <div
           className="absolute inset-0 backdrop-blur-md"
           style={{

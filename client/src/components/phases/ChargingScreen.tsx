@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import anime from "animejs";
 import DuelFrame from "@/components/duel/DuelFrame";
-import { useMatch } from "@/lib/matchStore";
+import { matchActions, useMatch } from "@/lib/matchStore";
 
 const MAGENTA = "#FF0066";
 const CYAN = "#00E5FF";
@@ -43,7 +43,15 @@ export default function ChargingScreen() {
   return (
     <DuelFrame>
       <div className="relative z-10 flex h-full flex-col items-center justify-center gap-6 px-6">
-        <p className="font-tech text-[11px] tracking-[0.4em] text-white/50">CHARGING…</p>
+        <div className="absolute top-4 left-4">
+          <button
+            onClick={() => matchActions.leave()}
+            className="rounded-full border border-white/20 bg-black/40 px-4 py-2 font-display text-[10px] font-black tracking-widest text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95"
+          >
+            KELUAR
+          </button>
+        </div>
+        <p className="font-tech text-[11px] tracking-[0.4em] text-white/50 mt-8">CHARGING…</p>
 
         <div className="relative grid place-items-center">
           <span

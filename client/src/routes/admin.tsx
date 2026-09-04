@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import AdminScreen from "@/components/phases/AdminScreen";
 
 export const Route = createFileRoute("/admin")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    adminToken: search.adminToken as string | undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Admin Control — Tri LTB Duel Clash" },

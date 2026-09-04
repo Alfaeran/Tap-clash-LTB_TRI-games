@@ -34,6 +34,7 @@ export default function AdminScreen() {
   const match = useMatch();
   const [series, setSeries] = useState(match.seriesLabel);
   const [scheduledTime, setScheduledTime] = useState("");
+  const [durationSec, setDurationSec] = useState(60);
   const [category, setCategory] = useState<"SMA" | "SMP">("SMA");
   const [selectedSchools, setSelectedSchools] = useState<string[]>([]);
   
@@ -81,7 +82,7 @@ export default function AdminScreen() {
     
     const timeToUse = scheduledTime.trim() || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     
-    matchActions.scheduleMatch(name1, name2, series, timeToUse);
+    matchActions.scheduleMatch(name1, name2, series, timeToUse, durationSec);
     
     // Reset selection
     setSelectedSchools([]);
@@ -204,7 +205,9 @@ export default function AdminScreen() {
                 <div key={sm.id} className="rounded-xl border border-white/20 bg-black/50 p-4">
                   <div className="flex justify-between items-center mb-3">
                     <span className="font-tech text-[10px] tracking-[0.2em] text-white/60">{sm.seriesCity}</span>
-                    <span className="rounded bg-white/10 px-2 py-0.5 font-tech text-[10px] font-bold text-white">{sm.scheduledTime}</span>
+                    <span className="rounded bg-white/10 px-2 py-0.5 font-tech text-[10px] font-bold text-white">
+                      {sm.scheduledTime} {sm.durationSec ? `(${sm.durationSec}s)` : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center mb-4">
                     <p className="font-display text-sm font-bold text-tri-magenta truncate w-[45%] text-right">{sm.schoolA}</p>
@@ -297,26 +300,38 @@ export default function AdminScreen() {
             BUAT JADWAL BARU
           </h2>
 
-          <div className="mt-4 flex gap-2">
-            <label className="flex flex-col gap-1 flex-1">
+          <div className="mt-4 grid grid-cols-12 gap-2">
+            <label className="flex flex-col gap-1 col-span-6">
               <span className="font-tech text-[10px] tracking-[0.3em] text-white/50">SERIES LABEL</span>
               <input
                 type="text"
                 value={series}
                 maxLength={40}
                 onChange={(e) => setSeries(e.target.value)}
-                className="rounded-lg border border-white/20 bg-black/50 px-3 py-2 font-tech text-xs text-white outline-none transition-colors focus:border-tri-cyan"
+                className="w-full rounded-lg border border-white/20 bg-black/50 px-3 py-2 font-tech text-xs text-white outline-none transition-colors focus:border-tri-cyan"
                 placeholder="Ex: SERI JOGJA"
               />
             </label>
-            <label className="flex flex-col gap-1 w-24">
+            <label className="flex flex-col gap-1 col-span-3">
               <span className="font-tech text-[10px] tracking-[0.3em] text-white/50">JAM</span>
               <input
                 type="text"
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
-                className="rounded-lg border border-white/20 bg-black/50 px-3 py-2 font-tech text-xs text-white text-center outline-none transition-colors focus:border-tri-cyan"
+                className="w-full rounded-lg border border-white/20 bg-black/50 px-2 py-2 font-tech text-xs text-white text-center outline-none transition-colors focus:border-tri-cyan"
                 placeholder="10:00"
+              />
+            </label>
+            <label className="flex flex-col gap-1 col-span-3">
+              <span className="font-tech text-[10px] tracking-[0.3em] text-white/50 truncate">DETIK</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={durationSec}
+                onChange={(e) => setDurationSec(parseInt(e.target.value, 10) || 60)}
+                className="w-full rounded-lg border border-white/20 bg-black/50 px-2 py-2 font-tech text-xs text-white text-center outline-none transition-colors focus:border-tri-cyan"
+                placeholder="60"
               />
             </label>
           </div>

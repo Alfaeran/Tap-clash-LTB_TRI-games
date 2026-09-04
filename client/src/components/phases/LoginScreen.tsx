@@ -51,6 +51,14 @@ export default function LoginScreen() {
     return (
       <DuelFrame>
         <div className="relative z-10 flex h-full flex-col items-center justify-center gap-6 px-5 py-8 text-center">
+          <div className="absolute top-4 left-4">
+            <button
+              onClick={() => matchActions.leave()}
+              className="rounded-full bg-white/10 px-4 py-2 font-display text-[10px] font-black tracking-widest text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95"
+            >
+              KEMBALI
+            </button>
+          </div>
           <div className="h-1 w-24 rounded-full" style={{ background: `linear-gradient(90deg, ${MAGENTA}, ${CYAN})` }} />
           <div>
             <h2 className="font-display text-xl font-black text-white tracking-widest">
@@ -79,12 +87,19 @@ export default function LoginScreen() {
     );
   }
 
-  // School Selection Phase
   if (validatedMatch && !match.playerSide) {
     return (
       <DuelFrame>
         <div className="relative z-10 flex h-full flex-col gap-6 px-5 py-8">
-          <header className="text-center">
+          <div className="absolute top-4 left-4">
+            <button
+              onClick={() => setValidatedMatch(null)}
+              className="rounded-full border border-white/20 bg-white/10 px-4 py-2 font-display text-[10px] font-black tracking-widest text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95"
+            >
+              KEMBALI
+            </button>
+          </div>
+          <header className="text-center mt-6">
             <h1 className="font-display text-2xl font-black tracking-tight text-white italic">
               PILIH SEKOLAH
             </h1>

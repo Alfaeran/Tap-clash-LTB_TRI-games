@@ -29,6 +29,9 @@ export const Route = createFileRoute("/")({
 
 function PlayerFlow() {
   const match = useMatch();
+  
+  if (!match.playerSide) return <LoginScreen />;
+  
   if (match.status === "charging") return <ChargingScreen />;
   if (match.status === "live") return <BattleScreen />;
   if (match.status === "finished") return <ResultScreen />;

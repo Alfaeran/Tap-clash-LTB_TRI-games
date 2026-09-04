@@ -8,9 +8,10 @@ const gameSettings = require('./config/gameSettings');
 
 // B-6: admin auth. Without a token any client could emit ADMIN_RESET from DevTools.
 // In production set ADMIN_TOKEN; in dev we generate one per run and print it.
-const ADMIN_TOKEN = gameSettings.ADMIN_TOKEN || crypto.randomBytes(16).toString('hex');
-if (!gameSettings.ADMIN_TOKEN) {
-  console.warn('[auth] ADMIN_TOKEN not set. Generated for this run:', ADMIN_TOKEN);
+// Note: You can set ADMIN_TOKEN in your .env file (e.g., ADMIN_TOKEN=your_secure_token)
+const ADMIN_TOKEN = gameSettings.ADMIN_TOKEN || 'admin123';
+if (ADMIN_TOKEN === 'admin123') {
+  console.warn('[auth] ADMIN_TOKEN not set. Using default local token:', ADMIN_TOKEN);
 }
 
 const app = express();
@@ -68,6 +69,7 @@ let currentMatch = {
   schoolA: null,
   schoolB: null,
   seriesCity: null,
+  durationSec: null,
 };
 let activeMatchCode = null; // The 6-digit code for the live match
 
@@ -276,6 +278,15 @@ io.on('connection', (socket) => {
     io.emit('PLAYER_COUNT_UPDATE', getPlayerCounts());
   });
 
+  socket.on('USER_LEAVE_SESSION', () => {
+    if (socket.schoolRoom) {
+      console.log(`User left school ${socket.schoolRoom}`);
+      socket.leave(socket.schoolRoom);
+      socket.schoolRoom = null;
+      io.emit('PLAYER_COUNT_UPDATE', getPlayerCounts());
+    }
+  });
+
   // B-1: clients send one batched count per CLIENT_BATCH_RATE_MS instead of
   // one event per tap. Counts land in an in-process buffer that a single timer
   // flushes to Redis, so Redis sees ~2 commands per tick regardless of crowd size.
@@ -311,6 +322,7 @@ io.on('connection', (socket) => {
       schoolB: payload.schoolB,
       seriesCity: payload.seriesCity,
       scheduledTime: payload.scheduledTime,
+      durationSec: payload.durationSec,
       status: 'scheduled'
     };
     scheduledMatches.push(newMatch);
@@ -343,6 +355,7 @@ io.on('connection', (socket) => {
       schoolA: sm.schoolA,
       schoolB: sm.schoolB,
       seriesCity: sm.seriesCity,
+      durationSec: sm.durationSec,
     };
     currentGameState = STATES.CARD_SELECT;
     
@@ -374,6 +387,7 @@ io.on('connection', (socket) => {
       schoolA: payload.schoolA,
       schoolB: payload.schoolB,
       seriesCity: payload.seriesCity,
+      durationSec: payload.durationSec,
     };
     currentGameState = STATES.CARD_SELECT;
     activeMatchCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -392,7 +406,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  onAdmin('ADMIN_START_COUNTDOWN', () => {
+  onAdmin('ADMIN_START_COUNTDOWN', (payload) => {
     // B-2: only a match sitting in CARD_SELECT can be counted down. A double
     // click used to reset a live battle back to CHARGING and queue a second
     // startBattle, so the battle silently restarted mid-play.
@@ -402,6 +416,10 @@ io.on('connection', (socket) => {
       return;
     }
     if (!currentMatch.id) return;
+    
+    if (payload && payload.durationSec) {
+      currentMatch.durationSec = payload.durationSec;
+    }
 
     currentGameState = STATES.CHARGING;
     io.emit('START_COUNTDOWN', { duration: gameSettings.COUNTDOWN_DURATION_MS });
@@ -443,6 +461,7 @@ io.on('connection', (socket) => {
       schoolA: null,
       schoolB: null,
       seriesCity: null,
+      durationSec: null,
     };
     activeMatchCode = null;
     io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch, activeMatchCode, playerCounts: { kicker: 0, goalie: 0 } });
@@ -465,7 +484,12 @@ io.on('connection', (socket) => {
 function startBattle() {
   if (currentGameState === STATES.TAP_BATTLE) return;
   currentGameState = STATES.TAP_BATTLE;
-  io.emit('START_BATTLE', { durationMs: gameSettings.BATTLE_DURATION_MS });
+  
+  const matchDurationMs = currentMatch.durationSec 
+    ? Math.round(currentMatch.durationSec * 1000)
+    : gameSettings.BATTLE_DURATION_MS;
+    
+  io.emit('START_BATTLE', { durationMs: matchDurationMs });
   // Since we don't have access to getPlayerCounts here easily, we just omit or rebuild it if needed.
   // Actually we can just let clients keep their previous count on START_BATTLE.
   io.emit('STATE_UPDATE', { state: currentGameState, match: currentMatch });
@@ -488,7 +512,7 @@ function startBattle() {
   battleEndTimer = setTimeout(async () => {
     battleEndTimer = null;
     await endBattle();
-  }, gameSettings.BATTLE_DURATION_MS);
+  }, matchDurationMs);
 }
 
 async function endBattle() {

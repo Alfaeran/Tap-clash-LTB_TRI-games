@@ -43,30 +43,30 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 text-center font-sans">
+        <h1 className="mb-2 font-display text-2xl font-black">This page didn't load</h1>
+        <p className="mb-6 font-tech text-sm text-gray-400">
+          {error?.message || "Something went wrong on our end. You can try refreshing or head back home."}
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <div className="flex gap-4">
           <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-gray-800 px-4 py-2 font-display text-sm font-bold text-white transition-colors hover:bg-gray-700"
           >
             Try again
           </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          <Link
+            to="/"
+            className="rounded-lg border border-gray-800 px-4 py-2 font-display text-sm font-bold transition-colors hover:bg-gray-100"
           >
             Go home
-          </a>
+          </Link>
         </div>
+        {error && (
+          <pre className="mt-8 text-left text-xs text-red-400 max-w-xl overflow-auto p-4 bg-gray-900 rounded">
+            {error.stack}
+          </pre>
+        )}
       </div>
     </div>
   );

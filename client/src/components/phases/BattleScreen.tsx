@@ -90,8 +90,17 @@ export default function BattleScreen() {
 
       <TugBar share={kickerShare} />
 
+      <div className="absolute top-4 left-4 z-50">
+        <button
+          onClick={() => matchActions.leave()}
+          className="rounded-full border border-white/20 bg-black/40 px-4 py-2 font-display text-[10px] font-black tracking-widest text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95"
+        >
+          KELUAR
+        </button>
+      </div>
+
       <div className="relative z-20 flex h-full flex-col gap-2 py-4 pr-3 pl-9">
-        <header className="tri-glass shrink-0 rounded-2xl border border-white/15 px-3 py-2">
+        <header className="tri-glass shrink-0 rounded-2xl border border-white/15 px-3 py-2 mt-8">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
             <div className="min-w-0">
               <p className="truncate font-tech text-[11px] font-bold tracking-widest text-white/90">

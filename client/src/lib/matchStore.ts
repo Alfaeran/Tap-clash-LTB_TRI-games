@@ -27,7 +27,7 @@ export type MatchState = {
   leaderboard: Array<{ school: string, points: number, wins: number, losses: number, draws: number, taps: number }>;
   isAdmin: boolean; // server-confirmed: this socket may emit ADMIN_* events
   
-  scheduledMatches: Array<{ id: string, schoolA: string, schoolB: string, seriesCity: string, scheduledTime: string, status: string }>;
+  scheduledMatches: Array<{ id: string, schoolA: string, schoolB: string, seriesCity: string, scheduledTime: string, status: string, durationMin?: number }>;
   completedMatches: Array<{ id: string, schoolA: string, schoolB: string, seriesCity: string, finalScoreA: number, finalScoreB: number, winnerSchool: string, timestamp: number }>;
 };
 
@@ -259,14 +259,17 @@ export const matchActions = {
       });
     }
   },
-  leave(side: DuelSide) {
+  leave() {
     set({ playerSide: null });
+    if (socket) {
+      socket.emit('USER_LEAVE_SESSION');
+    }
   },
   setupMatch(schoolA: string, schoolB: string, seriesCity: string) {
     if (socket) socket.emit('ADMIN_SET_MATCH', { schoolA, schoolB, seriesCity });
   },
-  scheduleMatch(schoolA: string, schoolB: string, seriesCity: string, scheduledTime: string) {
-    if (socket) socket.emit('ADMIN_SCHEDULE_MATCH', { schoolA, schoolB, seriesCity, scheduledTime });
+  scheduleMatch(schoolA: string, schoolB: string, seriesCity: string, scheduledTime: string, durationSec?: number) {
+    if (socket) socket.emit('ADMIN_SCHEDULE_MATCH', { schoolA, schoolB, seriesCity, scheduledTime, durationSec });
   },
   startScheduled(id: string) {
     if (socket) socket.emit('ADMIN_START_SCHEDULED', { id });
@@ -276,13 +279,30 @@ export const matchActions = {
   },
   validateCode(code: string): Promise<{ success: boolean; match?: any; message?: string }> {
     return new Promise((resolve) => {
-      if (!socket) return resolve({ success: false, message: 'Tidak terhubung ke server' });
-      socket.emit('USER_VALIDATE_CODE', { code }, (response: any) => resolve(response));
+      if (!socket || !socket.connected) {
+        return resolve({ success: false, message: 'Terputus dari server. Memuat ulang koneksi...' });
+      }
+      
+      let isResolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          resolve({ success: false, message: 'Server tidak merespons (Timeout).' });
+        }
+      }, 5000);
+
+      socket.emit('USER_VALIDATE_CODE', { code }, (response: any) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timeoutId);
+          resolve(response);
+        }
+      });
     });
   },
-  startCharging() {
+  startCharging(durationSec?: number) {
     if (socket) {
-      socket.emit('ADMIN_START_COUNTDOWN');
+      socket.emit('ADMIN_START_COUNTDOWN', { durationSec });
     }
   },
   goLive() {

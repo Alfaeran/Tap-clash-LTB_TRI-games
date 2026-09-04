@@ -1,10 +1,8 @@
 @import "tailwindcss" source(none);
-@source "../src";
 @import "tw-animate-css";
-
-/* Fallback esports font from Google Fonts when Ooredoo is unavailable */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
+@source "../src";
 @custom-variant dark (&:is(.dark *));
 
 /* Custom brand font */

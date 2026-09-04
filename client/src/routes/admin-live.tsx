@@ -13,6 +13,12 @@ function AdminLiveRoute() {
   const match = useMatch();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [remaining, setRemaining] = useState(match.durationSec * 1000);
+  
+  const defaultMin = Math.floor((match.durationSec || 60) / 60).toString();
+  const defaultSec = ((match.durationSec || 60) % 60).toString();
+  
+  const [inputMin, setInputMin] = useState(defaultMin);
+  const [inputSec, setInputSec] = useState(defaultSec);
 
   // Live-updating timer
   useEffect(() => {
@@ -59,6 +65,12 @@ function AdminLiveRoute() {
         <section className="tri-glass rounded-2xl border border-white/15 p-4">
           <div className="mb-2 text-center">
             <h2 className="font-display text-xs font-black tracking-[0.2em] text-white">{match.seriesLabel}</h2>
+            {match.activeMatchCode && (
+              <div className="mt-2 inline-block rounded-lg border border-tri-magenta bg-tri-magenta/10 px-4 py-1.5 shadow-[0_0_10px_rgba(255,0,102,0.3)]">
+                <p className="font-tech text-[10px] tracking-[0.2em] text-white/70">KODE MATCH</p>
+                <p className="font-display text-xl font-black tracking-[0.2em] text-white">{match.activeMatchCode}</p>
+              </div>
+            )}
           </div>
 
           {/* Team cards with scores */}
@@ -68,7 +80,7 @@ function AdminLiveRoute() {
               style={{ borderColor: match.playerCounts.kicker > 0 ? MAGENTA : `${MAGENTA}44` }}
             >
               <p className="tri-text-magenta font-display text-xs font-black tracking-[0.2em]">KICKER</p>
-              <p className="truncate px-1 font-tech text-sm font-bold">
+              <p className="truncate px-1 font-tech text-sm font-bold text-white">
                 {match.schools[0] || '—'}
               </p>
               <p className="font-tech text-[9px] tracking-widest text-white/90">
@@ -89,7 +101,7 @@ function AdminLiveRoute() {
               style={{ borderColor: match.playerCounts.goalie > 0 ? CYAN : `${CYAN}44` }}
             >
               <p className="tri-text-cyan font-display text-xs font-black tracking-[0.2em]">GOALIE</p>
-              <p className="truncate px-1 font-tech text-sm font-bold">
+              <p className="truncate px-1 font-tech text-sm font-bold text-white">
                 {match.schools[1] || '—'}
               </p>
               <p className="font-tech text-[9px] tracking-widest text-white/90">
@@ -135,12 +147,48 @@ function AdminLiveRoute() {
             STATUS: {match.status.toUpperCase()} &middot; {formatClock(displayRemaining)}
           </p>
 
+          {match.status === 'lobby' && (
+            <div className="mt-4 flex flex-col items-center">
+              <span className="mb-2 font-tech text-[10px] tracking-[0.3em] text-white/50">DURASI MATCH</span>
+              <div className="flex gap-3">
+                <label className="flex flex-col gap-1 items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={inputMin}
+                    onChange={(e) => setInputMin(e.target.value)}
+                    className="rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 font-tech text-xs text-white text-center outline-none transition-colors focus:border-tri-cyan w-16"
+                    placeholder="0"
+                  />
+                  <span className="font-tech text-[9px] tracking-[0.2em] text-white/40">MENIT</span>
+                </label>
+                <span className="font-display text-xl text-white/30 pt-1">:</span>
+                <label className="flex flex-col gap-1 items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={inputSec}
+                    onChange={(e) => setInputSec(e.target.value)}
+                    className="rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 font-tech text-xs text-white text-center outline-none transition-colors focus:border-tri-cyan w-16"
+                    placeholder="0"
+                  />
+                  <span className="font-tech text-[9px] tracking-[0.2em] text-white/40">DETIK</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* Control buttons */}
           <div className="mt-3 grid grid-cols-3 gap-2">
             <button
               type="button"
               disabled={!bothReady || match.status !== 'lobby'}
-              onClick={() => matchActions.startCharging()}
+              onClick={() => {
+                const totalSec = (parseInt(inputMin, 10) || 0) * 60 + (parseInt(inputSec, 10) || 0);
+                matchActions.startCharging(totalSec > 0 ? totalSec : 10);
+              }}
               className="rounded-xl border-2 border-white/60 py-3 font-display text-xs font-black text-white tracking-[0.2em] transition-all disabled:opacity-40"
               style={{
                 boxShadow: bothReady && match.status === 'lobby' ? `0 0 16px ${MAGENTA}` : 'none',

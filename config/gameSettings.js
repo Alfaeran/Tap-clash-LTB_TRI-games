@@ -20,6 +20,7 @@ module.exports = {
 
   // Admin auth: required to accept any ADMIN_* socket event.
   // Leave unset in dev and the server generates one per run and logs it.
+  // Note: You can set this via a .env file (e.g., ADMIN_TOKEN=your_secure_token)
   ADMIN_TOKEN: process.env.ADMIN_TOKEN || '',
 
   // Redis configuration
